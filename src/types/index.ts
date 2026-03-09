@@ -1,0 +1,64 @@
+export interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  baseSize: number;
+  size: number;
+  targetSize: number;
+  color: string;
+  hue: number;
+  saturation: number;
+  lightness: number;
+  blur: number;
+  opacity: number;
+  depth: number;
+  gridX: number;
+  gridY: number;
+  noiseOffsetX: number;
+  noiseOffsetY: number;
+}
+
+export interface AudioData {
+  bass: number;
+  mid: number;
+  high: number;
+  overall: number;
+}
+
+export interface Settings {
+  circleCount: number;
+  minSize: number;
+  maxSize: number;
+  blurMin: number;
+  blurMax: number;
+  animationSpeed: number;
+  noiseScale: number;
+  floatGridBlend: number;
+  gridColumns: number;
+  soundSensitivity: number;
+  soundSmoothing: number;
+  micGain: number;
+  imageIntervalMin: number;
+  imageIntervalMax: number;
+  imageFadeDuration: number;
+  imageIntensity: number;
+  backgroundColor: string;
+  paletteColors: string[];
+  hueVariation: number;
+  opacityMin: number;
+  opacityMax: number;
+  depthOfField: number;
+  fadeDuration: number;
+  useGrid: boolean;
+}
+
+export interface Preset {
+  name: string;
+  settings: Partial<Omit<Settings, 'useGrid'>>;
+}
+
+export interface MediaItem {
+  src: string;
+  type: 'image' | 'video' | 'gif';
+}
