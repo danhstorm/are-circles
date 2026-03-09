@@ -289,17 +289,16 @@ export class CirclesRenderer {
     const mediaActive = this.media.intensity > 0.01;
     if (s.mediaAutoGrid && !s.useGrid) {
       const targetBlend = mediaActive ? 1 : 0;
-      const blendSpeed = mediaActive ? 2.0 : 1.5; // form faster, scatter slower
+      const blendSpeed = mediaActive ? 0.6 : 0.8; // slow formation, slightly faster scatter
       this.mediaGridBlend += (targetBlend - this.mediaGridBlend) * Math.min(1, dt * blendSpeed);
     } else {
       this.mediaGridBlend = 0;
     }
     this.prevMediaActive = mediaActive;
 
-    // Compute media grid positions using mediaGridColumns
+    // Compute media grid cell size
     const mediaGridCols = s.mediaAutoGrid ? s.mediaGridColumns : s.gridColumns;
     const mediaCellW = w / mediaGridCols;
-    const mediaGridRows = Math.ceil(h / mediaCellW);
 
     // Wave direction vector
     const waveDirX = Math.cos(s.waveDirection);
@@ -308,9 +307,9 @@ export class CirclesRenderer {
     for (let pi = 0; pi < this.particles.length; pi++) {
       const p = this.particles[pi];
 
-      // Media grid target position for this particle
-      const mgCol = pi % mediaGridCols;
-      const mgRow = Math.floor(pi / mediaGridCols) % Math.max(1, mediaGridRows);
+      // Media grid: snap to nearest cell based on particle's current position
+      const mgCol = Math.floor(p.x / mediaCellW);
+      const mgRow = Math.floor(p.y / mediaCellW);
       const mgX = (mgCol + 0.5) * mediaCellW;
       const mgY = (mgRow + 0.5) * mediaCellW;
 
