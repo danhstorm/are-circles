@@ -410,14 +410,16 @@ export class CirclesRenderer {
       );
       const mediaSize = mediaBright * s.imageIntensity * (s.maxSize * 1.2);
 
-      // Crossfade: pattern fades out as media fades in
-      const mediaBlend = mediaFade * s.imageIntensity;
+      // Crossfade: media fully replaces pattern when active
+      // mediaFade goes 0→1, use it directly so at full media the pattern is completely gone
+      const mediaBlend = Math.min(1, mediaFade);
       const blendedSize = patternSize * (1 - mediaBlend) + mediaSize * mediaBlend;
 
       // Sound burst pumps size on top
       const burstSizeMult = 1 + this.soundBurst * 2.0 * (0.5 + p.depth * 0.5);
       p.targetSize = blendedSize * burstSizeMult;
-      p.targetSize = Math.max(s.minSize * 0.1, Math.min(s.maxSize * 1.5, p.targetSize));
+      // Allow size to reach 0 when media says so
+      p.targetSize = Math.max(0, Math.min(s.maxSize * 1.5, p.targetSize));
 
       p.size += (p.targetSize - p.size) * Math.min(1, dt * 4);
 
