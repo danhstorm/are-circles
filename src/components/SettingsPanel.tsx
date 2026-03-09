@@ -259,6 +259,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
                 onChange(s);
               }} />
               <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
+              <Slider label="Blur %" value={settings.blurPercent} min={0} max={1} step={0.05} onChange={(v) => set('blurPercent', v)} />
             </div>
           </Section>
 
@@ -281,11 +282,23 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
                 Trigger Random (M)
               </button>
             </div>
+            <label className="flex items-center gap-2 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={settings.mediaAutoGrid}
+                onChange={(e) => set('mediaAutoGrid', e.target.checked)}
+                className="accent-white/60 w-4 h-4"
+              />
+              <span className="text-sm text-white/80">Form grid on trigger</span>
+            </label>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
               <Slider label="Interval Min (s)" value={settings.imageIntervalMin} min={5} max={60} step={1} onChange={(v) => set('imageIntervalMin', v)} />
               <Slider label="Interval Max (s)" value={settings.imageIntervalMax} min={10} max={120} step={1} onChange={(v) => set('imageIntervalMax', v)} />
               <Slider label="Fade (s)" value={settings.imageFadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('imageFadeDuration', v)} />
               <Slider label="Intensity" value={settings.imageIntensity} min={0} max={1.5} step={0.05} onChange={(v) => set('imageIntensity', v)} />
+              {settings.mediaAutoGrid && (
+                <Slider label="Grid Columns" value={settings.mediaGridColumns} min={10} max={100} step={1} onChange={(v) => set('mediaGridColumns', v)} />
+              )}
             </div>
             {mediaItems.length > 0 && (
               <div className="grid grid-cols-4 gap-2 pt-2">

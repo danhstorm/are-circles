@@ -17,6 +17,8 @@ export class CirclesRenderer {
   private settings: Settings;
   private soundBurst = 0;
   private prevGridCols = 0;
+  private mediaGridBlend = 0; // 0 = scattered, 1 = grid formation
+  private prevMediaActive = false;
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -283,11 +285,35 @@ export class CirclesRenderer {
     this.media.setEnabled(s.mediaEnabled);
     this.media.update(dt, s.imageIntervalMin, s.imageIntervalMax, s.imageFadeDuration);
 
+    // Media auto-grid: blend toward grid when media is active
+    const mediaActive = this.media.intensity > 0.01;
+    if (s.mediaAutoGrid && !s.useGrid) {
+      const targetBlend = mediaActive ? 1 : 0;
+      const blendSpeed = mediaActive ? 2.0 : 1.5; // form faster, scatter slower
+      this.mediaGridBlend += (targetBlend - this.mediaGridBlend) * Math.min(1, dt * blendSpeed);
+    } else {
+      this.mediaGridBlend = 0;
+    }
+    this.prevMediaActive = mediaActive;
+
+    // Compute media grid positions using mediaGridColumns
+    const mediaGridCols = s.mediaAutoGrid ? s.mediaGridColumns : s.gridColumns;
+    const mediaCellW = w / mediaGridCols;
+    const mediaGridRows = Math.ceil(h / mediaCellW);
+
     // Wave direction vector
     const waveDirX = Math.cos(s.waveDirection);
     const waveDirY = Math.sin(s.waveDirection);
 
-    for (const p of this.particles) {
+    for (let pi = 0; pi < this.particles.length; pi++) {
+      const p = this.particles[pi];
+
+      // Media grid target position for this particle
+      const mgCol = pi % mediaGridCols;
+      const mgRow = Math.floor(pi / mediaGridCols) % Math.max(1, mediaGridRows);
+      const mgX = (mgCol + 0.5) * mediaCellW;
+      const mgY = (mgRow + 0.5) * mediaCellW;
+
       // ===== POSITION =====
       if (s.useGrid) {
         const looseness = 1 - s.floatGridBlend;
@@ -320,6 +346,12 @@ export class CirclesRenderer {
 
         p.x += (p.homeX - p.x) * Math.min(1, dt * 3);
         p.y += (p.homeY - p.y) * Math.min(1, dt * 3);
+
+        // Blend toward media grid formation when media is active
+        if (this.mediaGridBlend > 0.001) {
+          p.x = p.x * (1 - this.mediaGridBlend) + mgX * this.mediaGridBlend;
+          p.y = p.y * (1 - this.mediaGridBlend) + mgY * this.mediaGridBlend;
+        }
       }
 
       // ===== SIZE: patterns drive size =====
@@ -355,12 +387,12 @@ export class CirclesRenderer {
       sizeMod = Math.max(0, Math.min(1, sizeMod));
       const patternSize = s.minSize + sizeMod * sizeRange;
 
-      // Media size (halftone: brightness = size)
+      // Media size: brightness drives size, zero brightness = hidden (size 0)
       const mediaBright = this.media.getBrightness(
         Math.max(0, Math.min(1, p.x / w)),
         Math.max(0, Math.min(1, p.y / h))
       );
-      const mediaSize = s.minSize * 0.2 + mediaBright * s.imageIntensity * sizeRange;
+      const mediaSize = mediaBright * s.imageIntensity * (s.maxSize * 1.2);
 
       // Crossfade: pattern fades out as media fades in
       const mediaBlend = mediaFade * s.imageIntensity;
@@ -380,8 +412,12 @@ export class CirclesRenderer {
       const hueShift = this.noise3D(p.noiseOffsetX + 200, 0, this.time * 0.2) * s.hueVariation;
       p.color = `hsla(${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%, ${p.opacity * this.masterOpacity})`;
 
-      // ===== BLUR: fixed per-particle, independent of pattern =====
-      p.blur = p.blurAmount * s.depthOfField;
+      // ===== BLUR: only a percentage of particles get blur =====
+      // blurAmount is 0-1 random per particle; only those above (1 - blurPercent) get blur
+      const blurThreshold = 1 - s.blurPercent;
+      p.blur = p.blurAmount >= blurThreshold
+        ? ((p.blurAmount - blurThreshold) / Math.max(0.001, s.blurPercent)) * s.depthOfField
+        : 0;
     }
   }
 
@@ -398,16 +434,22 @@ export class CirclesRenderer {
     for (const p of this.sortedParticles) {
       if (p.size < 0.5) continue;
       const r = p.size;
-      const softness = this.settings.blurMin + p.blur * (this.settings.blurMax - this.settings.blurMin);
-      const innerR = r * (1 - softness);
-
-      const grad = ctx.createRadialGradient(p.x, p.y, Math.max(0, innerR), p.x, p.y, r);
-      grad.addColorStop(0, p.color);
-      grad.addColorStop(1, p.color.replace(/[\d.]+\)$/, '0)'));
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = grad;
+
+      if (p.blur > 0.001) {
+        // Blurred circle: radial gradient for bokeh effect
+        const softness = this.settings.blurMin + p.blur * (this.settings.blurMax - this.settings.blurMin);
+        const innerR = r * (1 - softness);
+        const grad = ctx.createRadialGradient(p.x, p.y, Math.max(0, innerR), p.x, p.y, r);
+        grad.addColorStop(0, p.color);
+        grad.addColorStop(1, p.color.replace(/[\d.]+\)$/, '0)'));
+        ctx.fillStyle = grad;
+      } else {
+        // Sharp circle: solid fill
+        ctx.fillStyle = p.color;
+      }
       ctx.fill();
     }
   }

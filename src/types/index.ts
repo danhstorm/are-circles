@@ -56,12 +56,15 @@ export interface Settings {
   imageFadeDuration: number;
   imageIntensity: number;
   mediaEnabled: boolean;
+  mediaAutoGrid: boolean;
+  mediaGridColumns: number;
   backgroundColor: string;
   paletteColors: string[];
   hueVariation: number;
   opacityMin: number;
   opacityMax: number;
   depthOfField: number;
+  blurPercent: number;
   fadeDuration: number;
   useGrid: boolean;
 }
