@@ -28,6 +28,11 @@ export class MediaEngine {
     return this.fadeProgress;
   }
 
+  get activeIndex(): number {
+    if (this.fadeDirection === 'idle') return -1;
+    return this.currentIndex;
+  }
+
   constructor() {
     this.canvas = new OffscreenCanvas(this.sampleWidth, this.sampleHeight);
     this.ctx = this.canvas.getContext('2d', { willReadFrequently: true })!;
@@ -43,6 +48,13 @@ export class MediaEngine {
 
   setItems(items: MediaItem[]) {
     this.items = items;
+    if (this.currentIndex >= items.length) {
+      this.currentIndex = -1;
+      this.fadeDirection = 'idle';
+      this.fadeProgress = 0;
+      this.videoEl?.pause();
+      this.videoEl = null;
+    }
   }
 
   triggerNext() {

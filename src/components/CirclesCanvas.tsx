@@ -16,6 +16,7 @@ export default function CirclesCanvas() {
   const [activePreset, setActivePreset] = useState<number | null>(null);
   const [customPresets, setCustomPresets] = useState<(Partial<Omit<Settings, 'useGrid'>> | null)[]>([null, null, null, null, null]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleSettingsChange = useCallback((s: Settings) => {
@@ -98,8 +99,14 @@ export default function CirclesCanvas() {
     const handleResize = () => renderer.resize();
     window.addEventListener('resize', handleResize);
 
+    // Poll active media index for UI highlight
+    const mediaIndexPoll = setInterval(() => {
+      setActiveMediaIndex(renderer.media.activeIndex);
+    }, 200);
+
     return () => {
       window.removeEventListener('resize', handleResize);
+      clearInterval(mediaIndexPoll);
       renderer.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -184,6 +191,7 @@ export default function CirclesCanvas() {
           rendererRef.current?.media.setItems(updated);
         }}
         mediaItems={mediaItems}
+        activeMediaIndex={activeMediaIndex}
         activePreset={activePreset}
         onApplyPreset={handleApplyPreset}
         onSavePreset={handleSavePreset}

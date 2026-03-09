@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import { Settings, MediaItem } from '@/types';
 import { presets } from '@/lib/presets';
 import DirectionPicker from './DirectionPicker';
@@ -16,6 +17,7 @@ interface Props {
   onRemoveMedia: (idx: number) => void;
   onUpdateMediaItem: (idx: number, item: MediaItem) => void;
   mediaItems: MediaItem[];
+  activeMediaIndex: number;
   activePreset: number | null;
   onApplyPreset: (idx: number) => void;
   onSavePreset: () => void;
@@ -55,6 +57,82 @@ function Slider({
   );
 }
 
+function RangeSlider({
+  label,
+  low,
+  high,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  low: number;
+  high: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (low: number, high: number) => void;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const frac = (v: number) => (v - min) / (max - min);
+  const leftPct = frac(low) * 100;
+  const rightPct = (1 - frac(high)) * 100;
+  const snap = (v: number) => {
+    const s = Math.round(v / step) * step;
+    return Math.max(min, Math.min(max, parseFloat(s.toFixed(8))));
+  };
+  const decimals = step < 1 ? 2 : 0;
+
+  const startDrag = (thumb: 'low' | 'high') => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const move = (ev: PointerEvent) => {
+      const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+      const val = snap(min + ratio * (max - min));
+      if (thumb === 'low') {
+        onChange(Math.min(val, high), high);
+      } else {
+        onChange(low, Math.max(val, low));
+      }
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 py-2 px-1 col-span-2">
+      <div className="flex justify-between text-sm">
+        <span className="text-white/80">{label}</span>
+        <span className="text-white/50 tabular-nums">{low.toFixed(decimals)} – {high.toFixed(decimals)}</span>
+      </div>
+      <div ref={trackRef} className="relative h-5 flex items-center">
+        <div className="absolute inset-x-0 h-1.5 rounded-full bg-white/10" />
+        <div
+          className="absolute h-1.5 rounded-full bg-white/25"
+          style={{ left: `${leftPct}%`, right: `${rightPct}%` }}
+        />
+        <div
+          className="absolute w-3.5 h-3.5 rounded-full bg-white/80 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{ left: `${leftPct}%` }}
+          onPointerDown={startDrag('low')}
+        />
+        <div
+          className="absolute w-3.5 h-3.5 rounded-full bg-white/80 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{ left: `${100 - rightPct}%` }}
+          onPointerDown={startDrag('high')}
+        />
+      </div>
+    </div>
+  );
+}
+
 function ColorPicker({
   label,
   value,
@@ -86,7 +164,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activePreset, onApplyPreset, onSavePreset }: Props) {
+export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, activePreset, onApplyPreset, onSavePreset }: Props) {
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onChange({ ...settings, [key]: value });
   };
@@ -202,26 +280,8 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               {!settings.useGrid && (
                 <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
               )}
-              <Slider label="Min Size" value={settings.minSize} min={1} max={settings.maxSize} step={1} onChange={(v) => {
-                const s = { ...settings, minSize: v };
-                if (v > settings.maxSize) s.maxSize = v;
-                onChange(s);
-              }} />
-              <Slider label="Max Size" value={settings.maxSize} min={settings.minSize} max={300} step={1} onChange={(v) => {
-                const s = { ...settings, maxSize: v };
-                if (v < settings.minSize) s.minSize = v;
-                onChange(s);
-              }} />
-              <Slider label="Opacity Min" value={settings.opacityMin} min={0.05} max={settings.opacityMax} step={0.05} onChange={(v) => {
-                const s = { ...settings, opacityMin: v };
-                if (v > settings.opacityMax) s.opacityMax = v;
-                onChange(s);
-              }} />
-              <Slider label="Opacity Max" value={settings.opacityMax} min={settings.opacityMin} max={1} step={0.05} onChange={(v) => {
-                const s = { ...settings, opacityMax: v };
-                if (v < settings.opacityMin) s.opacityMin = v;
-                onChange(s);
-              }} />
+              <RangeSlider label="Size" low={settings.minSize} high={settings.maxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, minSize: lo, maxSize: hi })} />
+              <RangeSlider label="Opacity" low={settings.opacityMin} high={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, opacityMin: lo, opacityMax: hi })} />
               <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
             </div>
           </Section>
@@ -248,16 +308,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
           {/* Depth & Blur */}
           <Section title="Depth & Blur">
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              <Slider label="Blur Min" value={settings.blurMin} min={0} max={settings.blurMax} step={0.05} onChange={(v) => {
-                const s = { ...settings, blurMin: v };
-                if (v > settings.blurMax) s.blurMax = v;
-                onChange(s);
-              }} />
-              <Slider label="Blur Max" value={settings.blurMax} min={settings.blurMin} max={1} step={0.05} onChange={(v) => {
-                const s = { ...settings, blurMax: v };
-                if (v < settings.blurMin) s.blurMin = v;
-                onChange(s);
-              }} />
+              <RangeSlider label="Blur" low={settings.blurMin} high={settings.blurMax} min={0} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, blurMin: lo, blurMax: hi })} />
               <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
               <Slider label="Blur %" value={settings.blurPercent} min={0} max={1} step={0.05} onChange={(v) => set('blurPercent', v)} />
             </div>
@@ -308,7 +359,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
                     <div key={item.src} className="relative group flex flex-col">
                       <button
                         onClick={() => onTriggerMediaByIndex(i)}
-                        className="w-full aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10 hover:border-white/30 transition-colors cursor-pointer"
+                        className={`w-full aspect-square rounded-lg overflow-hidden bg-black/40 border transition-colors cursor-pointer ${activeMediaIndex === i ? 'border-white/60 ring-1 ring-white/40' : 'border-white/10 hover:border-white/30'}`}
                         title={name}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
