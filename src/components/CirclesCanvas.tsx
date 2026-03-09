@@ -3,13 +3,15 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
 import { Settings, MediaItem } from '@/types';
-import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset } from '@/lib/settings';
+import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset, loadMediaOverrides, saveMediaOverrides } from '@/lib/settings';
 import { presets } from '@/lib/presets';
 import SettingsPanel from './SettingsPanel';
 
 export default function CirclesCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CirclesRenderer | null>(null);
+  const dragRef = useRef(false);
+  const pointerStartRef = useRef({ x: 0, y: 0 });
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [panelVisible, setPanelVisible] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
@@ -91,8 +93,13 @@ export default function CirclesCanvas() {
     fetch('/api/media')
       .then((r) => r.json())
       .then((items: MediaItem[]) => {
-        renderer.media.setItems(items);
-        setMediaItems(items);
+        const overrides = loadMediaOverrides();
+        const merged = items.map((item: MediaItem) => ({
+          ...item,
+          ...overrides[item.src],
+        }));
+        renderer.media.setItems(merged);
+        setMediaItems(merged);
       })
       .catch(() => {});
 
@@ -166,8 +173,23 @@ export default function CirclesCanvas() {
         ref={canvasRef}
         className="fixed inset-0 w-full h-full"
         style={{ display: 'block', touchAction: 'none' }}
+        onPointerDown={(e) => {
+          pointerStartRef.current = { x: e.clientX, y: e.clientY };
+          dragRef.current = false;
+          rendererRef.current?.setCursor(e.clientX, e.clientY, true);
+        }}
+        onPointerMove={(e) => {
+          if (e.buttons > 0) {
+            const dx = e.clientX - pointerStartRef.current.x;
+            const dy = e.clientY - pointerStartRef.current.y;
+            if (dx * dx + dy * dy > 25) dragRef.current = true;
+            rendererRef.current?.setCursor(e.clientX, e.clientY, true);
+          }
+        }}
+        onPointerUp={() => rendererRef.current?.setCursor(0, 0, false)}
+        onPointerLeave={() => rendererRef.current?.setCursor(0, 0, false)}
         onClick={() => {
-          if (!panelVisible) setPanelVisible(true);
+          if (!panelVisible && !dragRef.current) setPanelVisible(true);
         }}
       />
       <SettingsPanel
@@ -189,6 +211,9 @@ export default function CirclesCanvas() {
           updated[idx] = item;
           setMediaItems(updated);
           rendererRef.current?.media.setItems(updated);
+          const overrides = loadMediaOverrides();
+          overrides[item.src] = { playMode: item.playMode, invert: item.invert };
+          saveMediaOverrides(overrides);
         }}
         mediaItems={mediaItems}
         activeMediaIndex={activeMediaIndex}

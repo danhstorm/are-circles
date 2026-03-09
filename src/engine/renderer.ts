@@ -20,6 +20,13 @@ export class CirclesRenderer {
   private prevGridCols = 0;
   private mediaGridBlend = 0; // 0 = scattered, 1 = grid formation
   private prevMediaActive = false;
+  private cursorX = 0;
+  private cursorY = 0;
+  private prevCursorX = 0;
+  private prevCursorY = 0;
+  private cursorVx = 0;
+  private cursorVy = 0;
+  private cursorDown = false;
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -156,6 +163,7 @@ export class CirclesRenderer {
         opacity: this.settings.opacityMin + depth * (this.settings.opacityMax - this.settings.opacityMin),
         depth,
         gridX: 0, gridY: 0,
+        mediaGridX: 0, mediaGridY: 0,
         noiseOffsetX: Math.random() * 1000,
         noiseOffsetY: Math.random() * 1000,
       });
@@ -186,6 +194,7 @@ export class CirclesRenderer {
         opacity: this.settings.opacityMin + depth * (this.settings.opacityMax - this.settings.opacityMin),
         depth,
         gridX: 0, gridY: 0,
+        mediaGridX: 0, mediaGridY: 0,
         noiseOffsetX: Math.random() * 1000,
         noiseOffsetY: Math.random() * 1000,
       });
@@ -217,8 +226,58 @@ export class CirclesRenderer {
     this.rebuildSortOrder();
   }
 
+  private assignMediaGridPositions() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const cols = this.settings.mediaGridColumns;
+    const cellW = w / cols;
+    const rows = Math.ceil(h / cellW);
+    const taken = new Set<number>();
+
+    // Particles closest to their natural cell center get first pick
+    const order = this.particles.map((p, i) => {
+      const c = Math.max(0, Math.min(cols - 1, Math.floor(p.x / cellW)));
+      const r = Math.max(0, Math.min(rows - 1, Math.floor(p.y / cellW)));
+      const dx = p.x - (c + 0.5) * cellW;
+      const dy = p.y - (r + 0.5) * cellW;
+      return { i, c, r, d: dx * dx + dy * dy };
+    }).sort((a, b) => a.d - b.d);
+
+    for (const { i, c, r } of order) {
+      let ac = c, ar = r;
+      if (taken.has(r * cols + c)) {
+        search:
+        for (let rad = 1; rad < Math.max(cols, rows); rad++) {
+          for (let dr = -rad; dr <= rad; dr++) {
+            for (let dc = -rad; dc <= rad; dc++) {
+              if (Math.abs(dr) < rad && Math.abs(dc) < rad) continue;
+              const nr = r + dr, nc = c + dc;
+              if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !taken.has(nr * cols + nc)) {
+                ar = nr; ac = nc;
+                break search;
+              }
+            }
+          }
+        }
+      }
+      taken.add(ar * cols + ac);
+      this.particles[i].mediaGridX = (ac + 0.5) * cellW;
+      this.particles[i].mediaGridY = (ar + 0.5) * cellW;
+    }
+  }
+
   triggerMedia() {
     this.media.triggerNext();
+  }
+
+  setCursor(x: number, y: number, down: boolean) {
+    if (!this.cursorDown && down) {
+      this.prevCursorX = x;
+      this.prevCursorY = y;
+    }
+    this.cursorX = x;
+    this.cursorY = y;
+    this.cursorDown = down;
   }
 
   triggerMediaByIndex(idx: number) {
@@ -305,30 +364,50 @@ export class CirclesRenderer {
     // Media auto-grid: blend toward grid when media is active
     const mediaActive = this.media.intensity > 0.01;
     if (s.mediaAutoGrid && !s.useGrid) {
+      if (mediaActive && !this.prevMediaActive) {
+        this.assignMediaGridPositions();
+      }
       const targetBlend = mediaActive ? 1 : 0;
-      const blendSpeed = mediaActive ? 0.6 : 0.8; // slow formation, slightly faster scatter
+      const blendSpeed = mediaActive ? 0.6 : 0.8;
       this.mediaGridBlend += (targetBlend - this.mediaGridBlend) * Math.min(1, dt * blendSpeed);
+      if (!mediaActive && this.mediaGridBlend < 0.005) this.mediaGridBlend = 0;
     } else {
       this.mediaGridBlend = 0;
     }
     this.prevMediaActive = mediaActive;
 
-    // Compute media grid cell size
-    const mediaGridCols = s.mediaAutoGrid ? s.mediaGridColumns : s.gridColumns;
-    const mediaCellW = w / mediaGridCols;
+    // Effective size range: interpolate between regular and grid sizes during auto-grid
+    const effectiveMinSize = s.useGrid
+      ? s.gridMinSize
+      : s.minSize + (s.gridMinSize - s.minSize) * this.mediaGridBlend;
+    const effectiveMaxSize = s.useGrid
+      ? s.gridMaxSize
+      : s.maxSize + (s.gridMaxSize - s.maxSize) * this.mediaGridBlend;
+    const sizeRange = effectiveMaxSize - effectiveMinSize;
+    const mediaFade = this.media.intensity;
+    const mediaBlend = (s.mediaAutoGrid && !s.useGrid)
+      ? Math.max(this.mediaGridBlend, Math.min(1, mediaFade))
+      : Math.min(1, mediaFade);
 
     // Wave direction vector
     const waveDirX = Math.cos(s.waveDirection);
     const waveDirY = Math.sin(s.waveDirection);
 
+    // Cursor velocity
+    if (this.cursorDown) {
+      this.cursorVx = (this.cursorX - this.prevCursorX) / Math.max(dt, 0.001);
+      this.cursorVy = (this.cursorY - this.prevCursorY) / Math.max(dt, 0.001);
+      this.prevCursorX = this.cursorX;
+      this.prevCursorY = this.cursorY;
+    } else {
+      this.cursorVx *= Math.pow(0.01, dt);
+      this.cursorVy *= Math.pow(0.01, dt);
+    }
+    const cursorRadius = Math.sqrt(w * w + h * h) * 0.18;
+    const cursorRadiusSq = cursorRadius * cursorRadius;
+
     for (let pi = 0; pi < this.particles.length; pi++) {
       const p = this.particles[pi];
-
-      // Media grid: snap to nearest cell based on particle's current position
-      const mgCol = Math.floor(p.x / mediaCellW);
-      const mgRow = Math.floor(p.y / mediaCellW);
-      const mgX = (mgCol + 0.5) * mediaCellW;
-      const mgY = (mgRow + 0.5) * mediaCellW;
 
       // ===== POSITION =====
       if (s.useGrid) {
@@ -365,23 +444,46 @@ export class CirclesRenderer {
 
         // Blend toward media grid formation when media is active
         if (this.mediaGridBlend > 0.001) {
-          p.x = p.x * (1 - this.mediaGridBlend) + mgX * this.mediaGridBlend;
-          p.y = p.y * (1 - this.mediaGridBlend) + mgY * this.mediaGridBlend;
+          p.x = p.x * (1 - this.mediaGridBlend) + p.mediaGridX * this.mediaGridBlend;
+          p.y = p.y * (1 - this.mediaGridBlend) + p.mediaGridY * this.mediaGridBlend;
         }
       }
 
+      // ===== CURSOR INTERACTION =====
+      if (this.cursorDown) {
+        const cdx = p.x - this.cursorX;
+        const cdy = p.y - this.cursorY;
+        const distSq = cdx * cdx + cdy * cdy;
+        if (distSq < cursorRadiusSq && distSq > 1) {
+          const dist = Math.sqrt(distSq);
+          const proximity = 1 - dist / cursorRadius;
+          const proxSq = proximity * proximity;
+          const nx = cdx / dist;
+          const ny = cdy / dist;
+          p.vx += nx * proxSq * 4000 * dt;
+          p.vy += ny * proxSq * 4000 * dt;
+          const cursorSpeed = Math.sqrt(this.cursorVx * this.cursorVx + this.cursorVy * this.cursorVy);
+          if (cursorSpeed > 5) {
+            const drag = proxSq * 2500 * dt * Math.min(1, cursorSpeed / 300);
+            p.vx += (this.cursorVx / cursorSpeed) * drag;
+            p.vy += (this.cursorVy / cursorSpeed) * drag;
+          }
+        }
+      }
+      if (p.vx !== 0 || p.vy !== 0) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        const damp = Math.pow(0.15, dt);
+        p.vx *= damp;
+        p.vy *= damp;
+        if (Math.abs(p.vx) < 0.1 && Math.abs(p.vy) < 0.1) { p.vx = 0; p.vy = 0; }
+      }
+
       // ===== SIZE: patterns drive size =====
-      const sizeRange = s.maxSize - s.minSize;
-      const mediaFade = this.media.intensity; // 0..1, how much media is active
-
-      // Pattern size (noise + wave)
       let sizeMod = 0.5;
-
-      // Viewport diagonal for relative sizing
       const vp = Math.sqrt(w * w + h * h);
 
       if (s.noiseStrength > 0.01) {
-        // noiseScale as fraction of viewport: 0.5 = noise blob covers half the screen
         const actualNoiseScale = (1 / Math.max(0.01, s.noiseScale)) / vp;
         const noiseSizeVal = (this.noise3D(
           p.x * actualNoiseScale + p.noiseOffsetX,
@@ -392,7 +494,6 @@ export class CirclesRenderer {
       }
 
       if (s.waveStrength > 0.01) {
-        // waveFrequency as fraction of viewport: 0.5 = one wave covers half the screen
         const wavelength = Math.max(0.01, s.waveFrequency) * vp;
         const dot = p.x * waveDirX + p.y * waveDirY;
         const wavePhase = (dot / wavelength) * Math.PI * 2 + this.time * s.waveSpeed * 4;
@@ -401,25 +502,19 @@ export class CirclesRenderer {
       }
 
       sizeMod = Math.max(0, Math.min(1, sizeMod));
-      const patternSize = s.minSize + sizeMod * sizeRange;
+      const patternSize = effectiveMinSize + sizeMod * sizeRange;
 
-      // Media size: brightness drives size, zero brightness = hidden (size 0)
       const mediaBright = this.media.getBrightness(
         Math.max(0, Math.min(1, p.x / w)),
         Math.max(0, Math.min(1, p.y / h))
       );
-      const mediaSize = mediaBright * s.imageIntensity * (s.maxSize * 1.2);
+      const mediaSize = mediaBright * s.imageIntensity * (effectiveMaxSize * 1.2);
 
-      // Crossfade: media fully replaces pattern when active
-      // mediaFade goes 0→1, use it directly so at full media the pattern is completely gone
-      const mediaBlend = Math.min(1, mediaFade);
       const blendedSize = patternSize * (1 - mediaBlend) + mediaSize * mediaBlend;
 
-      // Sound burst pumps size on top
       const burstSizeMult = 1 + this.soundBurst * 2.0 * (0.5 + p.depth * 0.5);
       p.targetSize = blendedSize * burstSizeMult;
-      // Allow size to reach 0 when media says so
-      p.targetSize = Math.max(0, Math.min(s.maxSize * 1.5, p.targetSize));
+      p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 1.5, p.targetSize));
 
       p.size += (p.targetSize - p.size) * Math.min(1, dt * 4);
 

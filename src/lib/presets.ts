@@ -124,6 +124,8 @@ export const presets: Preset[] = [
       waveSpeed: 0.5,
       floatGridBlend: 1.0,
       gridColumns: 40,
+      gridMinSize: 2,
+      gridMaxSize: 25,
       soundSensitivity: 1.0,
       soundSmoothing: 0.91,
       soundBurstDecay: 0.90,

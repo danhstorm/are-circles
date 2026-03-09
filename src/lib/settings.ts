@@ -1,4 +1,4 @@
-import { Settings } from '@/types';
+import { Settings, MediaPlayMode } from '@/types';
 import { DEFAULT_PALETTE } from './presets';
 
 const STORAGE_KEY = 'are-circles-settings';
@@ -42,6 +42,8 @@ export const defaultSettings: Settings = {
   blurPercent: 0.5,
   fadeDuration: 2,
   useGrid: false,
+  gridMinSize: 2,
+  gridMaxSize: 30,
 };
 
 export function loadSettings(): Settings {
@@ -90,5 +92,23 @@ export function saveCustomPreset(idx: number, settings: Partial<Omit<Settings, '
     const existing = loadCustomPresets();
     existing[idx] = settings;
     localStorage.setItem(PRESETS_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+const MEDIA_OVERRIDES_KEY = 'are-circles-media-overrides';
+
+export function loadMediaOverrides(): Record<string, { playMode: MediaPlayMode; invert: boolean }> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(MEDIA_OVERRIDES_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return {};
+}
+
+export function saveMediaOverrides(overrides: Record<string, { playMode: MediaPlayMode; invert: boolean }>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MEDIA_OVERRIDES_KEY, JSON.stringify(overrides));
   } catch {}
 }

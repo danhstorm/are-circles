@@ -18,6 +18,8 @@ export interface Particle {
   depth: number;
   gridX: number;
   gridY: number;
+  mediaGridX: number;
+  mediaGridY: number;
   noiseOffsetX: number;
   noiseOffsetY: number;
 }
@@ -67,6 +69,8 @@ export interface Settings {
   blurPercent: number;
   fadeDuration: number;
   useGrid: boolean;
+  gridMinSize: number;
+  gridMaxSize: number;
 }
 
 export interface Preset {

@@ -281,6 +281,9 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
                 <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
               )}
               <RangeSlider label="Size" low={settings.minSize} high={settings.maxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, minSize: lo, maxSize: hi })} />
+              {(settings.useGrid || settings.mediaAutoGrid) && (
+                <RangeSlider label="Grid Size" low={settings.gridMinSize} high={settings.gridMaxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, gridMinSize: lo, gridMaxSize: hi })} />
+              )}
               <RangeSlider label="Opacity" low={settings.opacityMin} high={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, opacityMin: lo, opacityMax: hi })} />
               <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
             </div>
