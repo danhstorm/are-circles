@@ -119,7 +119,13 @@ export class MediaEngine {
 
     if (item.playMode === 'pingpong') {
       v.loop = false;
-      v.onended = () => this.handlePingpongEnd(v);
+      v.onended = () => {
+        // Forward pass ended, start reverse
+        if (this.currentItem?.playMode === 'pingpong' && !this.pingpongReverse) {
+          this.pingpongReverse = true;
+          v.pause();
+        }
+      };
     } else {
       v.loop = true;
     }
@@ -134,23 +140,17 @@ export class MediaEngine {
     v.load();
   }
 
-  private handlePingpongEnd(v: HTMLVideoElement) {
-    if (!this.currentItem || this.currentItem.playMode !== 'pingpong') return;
-    this.pingpongReverse = !this.pingpongReverse;
-    v.playbackRate = this.pingpongReverse ? -1 : 1;
-    if (this.pingpongReverse) {
-      // Seek to near end and play backwards
-      v.currentTime = Math.max(0, v.duration - 0.05);
-    } else {
-      v.currentTime = 0;
-    }
-    v.play().catch(() => {
-      // Fallback: some browsers don't support negative playbackRate
-      // Just loop normally
-      v.playbackRate = 1;
+  private updatePingpong(dt: number) {
+    const v = this.videoEl;
+    if (!v || !this.pingpongReverse) return;
+    // Manually seek backwards to simulate reverse playback
+    v.currentTime = Math.max(0, v.currentTime - dt);
+    if (v.currentTime <= 0.05) {
+      // Reverse pass done, start forward again
+      this.pingpongReverse = false;
       v.currentTime = 0;
       v.play();
-    });
+    }
   }
 
   private sampleBrightness() {
@@ -179,6 +179,7 @@ export class MediaEngine {
 
   update(dt: number, intervalMin: number, intervalMax: number, duration: number) {
     this.fadeDuration = duration;
+    this.updatePingpong(dt);
 
     this.sampleAccum += dt;
     const shouldSample = this.sampleAccum >= this.sampleInterval;

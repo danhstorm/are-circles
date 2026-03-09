@@ -44,6 +44,8 @@ export const defaultSettings: Settings = {
   useGrid: false,
   gridMinSize: 2,
   gridMaxSize: 30,
+  gravityShape: 'none',
+  gravityStrength: 0.3,
 };
 
 export function loadSettings(): Settings {
@@ -92,6 +94,24 @@ export function saveCustomPreset(idx: number, settings: Partial<Omit<Settings, '
     const existing = loadCustomPresets();
     existing[idx] = settings;
     localStorage.setItem(PRESETS_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+const MEDIA_HIDDEN_KEY = 'are-circles-media-hidden';
+
+export function loadHiddenMedia(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(MEDIA_HIDDEN_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [];
+}
+
+export function saveHiddenMedia(hidden: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(MEDIA_HIDDEN_KEY, JSON.stringify(hidden));
   } catch {}
 }
 

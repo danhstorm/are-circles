@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
 import { Settings, MediaItem } from '@/types';
-import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset, loadMediaOverrides, saveMediaOverrides } from '@/lib/settings';
+import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset, loadMediaOverrides, saveMediaOverrides, loadHiddenMedia, saveHiddenMedia } from '@/lib/settings';
 import { presets } from '@/lib/presets';
 import SettingsPanel from './SettingsPanel';
 
@@ -90,14 +90,17 @@ export default function CirclesCanvas() {
     rendererRef.current = renderer;
     renderer.start();
 
-    fetch('/api/media')
+    fetch('/api/media', { cache: 'no-store' })
       .then((r) => r.json())
       .then((items: MediaItem[]) => {
+        const hidden = loadHiddenMedia();
         const overrides = loadMediaOverrides();
-        const merged = items.map((item: MediaItem) => ({
-          ...item,
-          ...overrides[item.src],
-        }));
+        const merged = items
+          .filter((item: MediaItem) => !hidden.includes(item.src))
+          .map((item: MediaItem) => ({
+            ...item,
+            ...overrides[item.src],
+          }));
         renderer.media.setItems(merged);
         setMediaItems(merged);
       })
@@ -188,9 +191,7 @@ export default function CirclesCanvas() {
         }}
         onPointerUp={() => rendererRef.current?.setCursor(0, 0, false)}
         onPointerLeave={() => rendererRef.current?.setCursor(0, 0, false)}
-        onClick={() => {
-          if (!panelVisible && !dragRef.current) setPanelVisible(true);
-        }}
+
       />
       <SettingsPanel
         settings={settings}
@@ -202,9 +203,32 @@ export default function CirclesCanvas() {
         onTriggerMedia={() => rendererRef.current?.triggerMedia()}
         onTriggerMediaByIndex={(idx) => rendererRef.current?.triggerMediaByIndex(idx)}
         onRemoveMedia={(idx) => {
+          const removed = mediaItems[idx];
           const updated = mediaItems.filter((_, i) => i !== idx);
           setMediaItems(updated);
           rendererRef.current?.media.setItems(updated);
+          if (removed) {
+            fetch('/api/media', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ src: removed.src }),
+            }).catch(() => {});
+            const hidden = loadHiddenMedia();
+            hidden.push(removed.src);
+            saveHiddenMedia(hidden);
+          }
+        }}
+        onResetHidden={() => {
+          saveHiddenMedia([]);
+          fetch('/api/media', { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((items: MediaItem[]) => {
+              const overrides = loadMediaOverrides();
+              const merged = items.map((item: MediaItem) => ({ ...item, ...overrides[item.src] }));
+              rendererRef.current?.media.setItems(merged);
+              setMediaItems(merged);
+            })
+            .catch(() => {});
         }}
         onUpdateMediaItem={(idx, item) => {
           const updated = [...mediaItems];
@@ -224,7 +248,7 @@ export default function CirclesCanvas() {
       {!panelVisible && (
         <button
           onClick={() => setPanelVisible(true)}
-          className="fixed top-4 right-4 z-40 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-opacity opacity-0 hover:opacity-100 cursor-pointer"
+          className="fixed top-4 right-4 z-40 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-opacity opacity-0 hover:opacity-100 cursor-pointer pointer-events-none sm:pointer-events-auto"
           title="Settings (H)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">

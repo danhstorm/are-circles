@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef } from 'react';
-import { Settings, MediaItem } from '@/types';
+import { useRef, useState, useEffect } from 'react';
+import { Settings, MediaItem, GravityShape } from '@/types';
 import { presets } from '@/lib/presets';
 import DirectionPicker from './DirectionPicker';
 
@@ -15,6 +15,7 @@ interface Props {
   onTriggerMedia: () => void;
   onTriggerMediaByIndex: (idx: number) => void;
   onRemoveMedia: (idx: number) => void;
+  onResetHidden: () => void;
   onUpdateMediaItem: (idx: number, item: MediaItem) => void;
   mediaItems: MediaItem[];
   activeMediaIndex: number;
@@ -164,7 +165,21 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, activePreset, onApplyPreset, onSavePreset }: Props) {
+export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onResetHidden, onUpdateMediaItem, mediaItems, activeMediaIndex, activePreset, onApplyPreset, onSavePreset }: Props) {
+  const [saved, setSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => { clearTimeout(savedTimer.current); clearTimeout(confirmTimer.current); }, []);
+
+  const handleSave = () => {
+    onSavePreset();
+    setSaved(true);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSaved(false), 1500);
+  };
+
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onChange({ ...settings, [key]: value });
   };
@@ -217,10 +232,14 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
             </div>
             {activePreset !== null && (
               <button
-                onClick={onSavePreset}
-                className="w-full mt-2 px-4 py-2 text-sm rounded-lg bg-white/15 hover:bg-white/25 text-white/90 border border-white/20 transition-colors cursor-pointer"
+                onClick={handleSave}
+                className={`w-full mt-2 px-4 py-2 text-sm rounded-lg border transition-colors cursor-pointer ${
+                  saved
+                    ? 'bg-green-600/30 text-green-300 border-green-500/30'
+                    : 'bg-white/15 hover:bg-white/25 text-white/90 border-white/20'
+                }`}
               >
-                Save to &quot;{presets[activePreset]?.name}&quot;
+                {saved ? 'Saved!' : <>Save to &quot;{presets[activePreset]?.name}&quot;</>}
               </button>
             )}
           </Section>
@@ -251,32 +270,28 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
             </div>
           </Section>
 
-          {/* Noise */}
-          <Section title="Noise Pattern">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          {/* Noise & Wave side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <Section title="Noise">
               <Slider label="Strength" value={settings.noiseStrength} min={0} max={2} step={0.05} onChange={(v) => set('noiseStrength', v)} />
               <Slider label="Size" value={settings.noiseScale} min={0.02} max={1} step={0.02} onChange={(v) => set('noiseScale', v)} />
               <Slider label="Speed" value={settings.noiseSpeed} min={0} max={2} step={0.05} onChange={(v) => set('noiseSpeed', v)} />
-            </div>
-          </Section>
-
-          {/* Wave */}
-          <Section title="Wave Pattern">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+            </Section>
+            <Section title="Wave">
               <Slider label="Strength" value={settings.waveStrength} min={0} max={2} step={0.05} onChange={(v) => set('waveStrength', v)} />
               <Slider label="Size" value={settings.waveFrequency} min={0.02} max={1} step={0.02} onChange={(v) => set('waveFrequency', v)} />
               <Slider label="Speed" value={settings.waveSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('waveSpeed', v)} />
-            </div>
-            <div className="flex items-center gap-4 px-1 pt-1">
-              <span className="text-sm text-white/80">Direction</span>
-              <DirectionPicker value={settings.waveDirection} onChange={(v) => set('waveDirection', v)} />
-              <span className="text-xs text-white/40 tabular-nums">{Math.round((settings.waveDirection * 180) / Math.PI)}deg</span>
-            </div>
-          </Section>
+              <div className="flex items-center gap-3 px-1 pt-1">
+                <span className="text-sm text-white/80">Dir</span>
+                <DirectionPicker value={settings.waveDirection} onChange={(v) => set('waveDirection', v)} />
+                <span className="text-xs text-white/40 tabular-nums">{Math.round((settings.waveDirection * 180) / Math.PI)}°</span>
+              </div>
+            </Section>
+          </div>
 
-          {/* Circles */}
-          <Section title="Circles">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+          {/* Circles & Depth side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <Section title="Circles">
               {!settings.useGrid && (
                 <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
               )}
@@ -286,8 +301,13 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               )}
               <RangeSlider label="Opacity" low={settings.opacityMin} high={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, opacityMin: lo, opacityMax: hi })} />
               <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
-            </div>
-          </Section>
+            </Section>
+            <Section title="Depth & Blur">
+              <RangeSlider label="Blur" low={settings.blurMin} high={settings.blurMax} min={0} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, blurMin: lo, blurMax: hi })} />
+              <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
+              <Slider label="Blur %" value={settings.blurPercent} min={0} max={1} step={0.05} onChange={(v) => set('blurPercent', v)} />
+            </Section>
+          </div>
 
           {/* Layout */}
           <Section title="Layout">
@@ -303,19 +323,32 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
             {settings.useGrid && (
               <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                 <Slider label="Grid Blend" value={settings.floatGridBlend} min={0} max={1} step={0.05} onChange={(v) => set('floatGridBlend', v)} />
-                <Slider label="Columns" value={settings.gridColumns} min={5} max={100} step={1} onChange={(v) => set('gridColumns', v)} />
+                <Slider label="Columns" value={settings.gridColumns} min={5} max={200} step={1} onChange={(v) => set('gridColumns', v)} />
               </div>
             )}
           </Section>
 
-          {/* Depth & Blur */}
-          <Section title="Depth & Blur">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              <RangeSlider label="Blur" low={settings.blurMin} high={settings.blurMax} min={0} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, blurMin: lo, blurMax: hi })} />
-              <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
-              <Slider label="Blur %" value={settings.blurPercent} min={0} max={1} step={0.05} onChange={(v) => set('blurPercent', v)} />
+          {/* Gravity Shape (only for non-grid) */}
+          {!settings.useGrid && <Section title="Gravity Shape">
+            <div className="grid grid-cols-4 gap-2">
+              {(['none', 'circle', 'oval', 'drop'] as GravityShape[]).map((shape) => (
+                <button
+                  key={shape}
+                  onClick={() => set('gravityShape', shape)}
+                  className={`px-3 py-2 text-sm rounded-lg transition-colors cursor-pointer capitalize ${
+                    settings.gravityShape === shape
+                      ? 'bg-white/20 text-white border border-white/30'
+                      : 'bg-white/8 hover:bg-white/15 text-white/80'
+                  }`}
+                >
+                  {shape}
+                </button>
+              ))}
             </div>
-          </Section>
+            {settings.gravityShape !== 'none' && (
+              <Slider label="Strength" value={settings.gravityStrength} min={0.05} max={2} step={0.05} onChange={(v) => set('gravityStrength', v)} />
+            )}
+          </Section>}
 
           {/* Media */}
           <Section title="Media Morphing">
@@ -335,6 +368,12 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               >
                 Trigger Random (M)
               </button>
+              <button
+                onClick={onResetHidden}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/8 hover:bg-white/15 text-white/50 transition-colors cursor-pointer"
+              >
+                Restore hidden
+              </button>
             </div>
             <label className="flex items-center gap-2 cursor-pointer py-1">
               <input
@@ -351,7 +390,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               <Slider label="Fade (s)" value={settings.imageFadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('imageFadeDuration', v)} />
               <Slider label="Intensity" value={settings.imageIntensity} min={0} max={1.5} step={0.05} onChange={(v) => set('imageIntensity', v)} />
               {settings.mediaAutoGrid && (
-                <Slider label="Grid Columns" value={settings.mediaGridColumns} min={10} max={100} step={1} onChange={(v) => set('mediaGridColumns', v)} />
+                <Slider label="Grid Columns" value={settings.mediaGridColumns} min={10} max={200} step={1} onChange={(v) => set('mediaGridColumns', v)} />
               )}
             </div>
             {mediaItems.length > 0 && (
@@ -373,13 +412,30 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
                           className={`w-full h-full object-cover grayscale brightness-150 contrast-125 ${item.invert ? 'invert' : ''}`}
                         />
                       </button>
-                      <button
-                        onClick={() => onRemoveMedia(i)}
-                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500/80 hover:bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                        title="Remove"
-                      >
-                        &times;
-                      </button>
+                      {confirmDelete === i ? (
+                        <button
+                          onClick={() => {
+                            setConfirmDelete(null);
+                            clearTimeout(confirmTimer.current);
+                            onRemoveMedia(i);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 px-1.5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[9px] font-medium flex items-center justify-center transition-opacity cursor-pointer z-10"
+                        >
+                          Delete
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setConfirmDelete(i);
+                            clearTimeout(confirmTimer.current);
+                            confirmTimer.current = setTimeout(() => setConfirmDelete(null), 3000);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500/80 hover:bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                          title="Remove"
+                        >
+                          &times;
+                        </button>
+                      )}
                       <div className="flex items-center gap-1 mt-0.5">
                         <button
                           onClick={() => onUpdateMediaItem(i, { ...item, playMode: item.playMode === 'loop' ? 'pingpong' : 'loop' })}

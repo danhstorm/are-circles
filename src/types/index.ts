@@ -71,7 +71,11 @@ export interface Settings {
   useGrid: boolean;
   gridMinSize: number;
   gridMaxSize: number;
+  gravityShape: GravityShape;
+  gravityStrength: number;
 }
+
+export type GravityShape = 'none' | 'circle' | 'oval' | 'drop';
 
 export interface Preset {
   name: string;
