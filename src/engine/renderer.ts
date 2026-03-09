@@ -16,6 +16,7 @@ export class CirclesRenderer {
   private fadeTarget = 0;
   private settings: Settings;
   private soundBurst = 0;
+  private soundSpeedBoost = 0;
   private prevGridCols = 0;
   private mediaGridBlend = 0; // 0 = scattered, 1 = grid formation
   private prevMediaActive = false;
@@ -281,6 +282,22 @@ export class CirclesRenderer {
     } else {
       this.soundBurst *= s.soundBurstDecay;
     }
+
+    // Audio speed boost: volume above threshold gently pushes pattern speed up
+    const speedThreshold = 0.15;
+    const speedTarget = burstInput > speedThreshold
+      ? (burstInput - speedThreshold) * 2.0
+      : 0;
+    if (speedTarget > this.soundSpeedBoost) {
+      // Rise smoothly
+      this.soundSpeedBoost += (speedTarget - this.soundSpeedBoost) * Math.min(1, dt * 3);
+    } else {
+      // Fade back slowly
+      this.soundSpeedBoost += (speedTarget - this.soundSpeedBoost) * Math.min(1, dt * 1.2);
+    }
+
+    // Apply speed boost to time progression
+    this.time += this.soundSpeedBoost * dt * 0.8;
 
     this.media.setEnabled(s.mediaEnabled);
     this.media.update(dt, s.imageIntervalMin, s.imageIntervalMax, s.imageFadeDuration);
