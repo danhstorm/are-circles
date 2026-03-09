@@ -2,6 +2,7 @@ import { Settings } from '@/types';
 import { DEFAULT_PALETTE } from './presets';
 
 const STORAGE_KEY = 'are-circles-settings';
+const PRESETS_KEY = 'are-circles-presets';
 
 export const defaultSettings: Settings = {
   circleCount: 200,
@@ -29,6 +30,7 @@ export const defaultSettings: Settings = {
   imageIntervalMax: 30,
   imageFadeDuration: 2.5,
   imageIntensity: 0.7,
+  mediaEnabled: true,
   backgroundColor: '#6B3A4A',
   paletteColors: DEFAULT_PALETTE,
   hueVariation: 15,
@@ -54,5 +56,36 @@ export function saveSettings(settings: Settings): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {}
+}
+
+// Loads custom preset overrides: first from localStorage (user's own),
+// falling back to /presets.json (repo defaults shipped by the developer).
+// Returns array of 5 slots, null = use built-in preset.
+export function loadCustomPresets(): (Partial<Omit<Settings, 'useGrid'>> | null)[] {
+  if (typeof window === 'undefined') return [null, null, null, null, null];
+  try {
+    const stored = localStorage.getItem(PRESETS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [null, null, null, null, null];
+}
+
+// Fetches repo-shipped preset defaults from /presets.json.
+// These are the developer's saved presets that new visitors get.
+export async function loadRepoPresets(): Promise<(Partial<Omit<Settings, 'useGrid'>> | null)[]> {
+  try {
+    const res = await fetch('/presets.json');
+    if (res.ok) return await res.json();
+  } catch {}
+  return [null, null, null, null, null];
+}
+
+export function saveCustomPreset(idx: number, settings: Partial<Omit<Settings, 'useGrid'>>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const existing = loadCustomPresets();
+    existing[idx] = settings;
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(existing));
   } catch {}
 }

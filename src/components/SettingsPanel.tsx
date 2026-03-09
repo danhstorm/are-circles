@@ -1,6 +1,6 @@
 'use client';
 
-import { Settings } from '@/types';
+import { Settings, MediaItem } from '@/types';
 import { presets } from '@/lib/presets';
 import DirectionPicker from './DirectionPicker';
 
@@ -8,14 +8,17 @@ interface Props {
   settings: Settings;
   onChange: (s: Settings) => void;
   visible: boolean;
+  onClose: () => void;
   audioActive: boolean;
   onToggleAudio: () => void;
   onTriggerMedia: () => void;
   onTriggerMediaByIndex: (idx: number) => void;
   onRemoveMedia: (idx: number) => void;
-  mediaItems: { src: string; type: string }[];
+  onUpdateMediaItem: (idx: number, item: MediaItem) => void;
+  mediaItems: MediaItem[];
   activePreset: number | null;
   onApplyPreset: (idx: number) => void;
+  onSavePreset: () => void;
 }
 
 function Slider({
@@ -83,7 +86,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export default function SettingsPanel({ settings, onChange, visible, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, mediaItems, activePreset, onApplyPreset }: Props) {
+export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activePreset, onApplyPreset, onSavePreset }: Props) {
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onChange({ ...settings, [key]: value });
   };
@@ -96,7 +99,7 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
 
   return (
     <div
-      className={`fixed top-6 right-6 bottom-6 w-[520px] z-50 transition-all duration-300 ${
+      className={`fixed top-2 right-2 bottom-2 w-[520px] max-w-[calc(100vw-1rem)] z-50 transition-all duration-300 sm:top-6 sm:right-6 sm:bottom-6 ${
         visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
       }`}
     >
@@ -105,7 +108,16 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
           {/* Header */}
           <div className="flex justify-between items-center">
             <h2 className="text-white text-base font-medium tracking-wide uppercase">Settings</h2>
-            <span className="text-white/30 text-sm">H to toggle</span>
+            <div className="flex items-center gap-3">
+              <span className="text-white/30 text-sm hidden sm:inline">H to toggle</span>
+              <button
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 cursor-pointer"
+                aria-label="Close"
+              >
+                &times;
+              </button>
+            </div>
           </div>
 
           {/* Presets */}
@@ -125,6 +137,14 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
                 </button>
               ))}
             </div>
+            {activePreset !== null && (
+              <button
+                onClick={onSavePreset}
+                className="w-full mt-2 px-4 py-2 text-sm rounded-lg bg-white/15 hover:bg-white/25 text-white/90 border border-white/20 transition-colors cursor-pointer"
+              >
+                Save to &quot;{presets[activePreset]?.name}&quot;
+              </button>
+            )}
           </Section>
 
           {/* Audio */}
@@ -182,10 +202,26 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
               {!settings.useGrid && (
                 <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
               )}
-              <Slider label="Min Size" value={settings.minSize} min={1} max={40} step={1} onChange={(v) => set('minSize', v)} />
-              <Slider label="Max Size" value={settings.maxSize} min={20} max={200} step={1} onChange={(v) => set('maxSize', v)} />
-              <Slider label="Opacity Min" value={settings.opacityMin} min={0.05} max={1} step={0.05} onChange={(v) => set('opacityMin', v)} />
-              <Slider label="Opacity Max" value={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(v) => set('opacityMax', v)} />
+              <Slider label="Min Size" value={settings.minSize} min={1} max={settings.maxSize} step={1} onChange={(v) => {
+                const s = { ...settings, minSize: v };
+                if (v > settings.maxSize) s.maxSize = v;
+                onChange(s);
+              }} />
+              <Slider label="Max Size" value={settings.maxSize} min={settings.minSize} max={300} step={1} onChange={(v) => {
+                const s = { ...settings, maxSize: v };
+                if (v < settings.minSize) s.minSize = v;
+                onChange(s);
+              }} />
+              <Slider label="Opacity Min" value={settings.opacityMin} min={0.05} max={settings.opacityMax} step={0.05} onChange={(v) => {
+                const s = { ...settings, opacityMin: v };
+                if (v > settings.opacityMax) s.opacityMax = v;
+                onChange(s);
+              }} />
+              <Slider label="Opacity Max" value={settings.opacityMax} min={settings.opacityMin} max={1} step={0.05} onChange={(v) => {
+                const s = { ...settings, opacityMax: v };
+                if (v < settings.opacityMin) s.opacityMin = v;
+                onChange(s);
+              }} />
               <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
             </div>
           </Section>
@@ -212,20 +248,39 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
           {/* Depth & Blur */}
           <Section title="Depth & Blur">
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              <Slider label="Blur Min" value={settings.blurMin} min={0} max={0.8} step={0.05} onChange={(v) => set('blurMin', v)} />
-              <Slider label="Blur Max" value={settings.blurMax} min={0.1} max={1} step={0.05} onChange={(v) => set('blurMax', v)} />
+              <Slider label="Blur Min" value={settings.blurMin} min={0} max={settings.blurMax} step={0.05} onChange={(v) => {
+                const s = { ...settings, blurMin: v };
+                if (v > settings.blurMax) s.blurMax = v;
+                onChange(s);
+              }} />
+              <Slider label="Blur Max" value={settings.blurMax} min={settings.blurMin} max={1} step={0.05} onChange={(v) => {
+                const s = { ...settings, blurMax: v };
+                if (v < settings.blurMin) s.blurMin = v;
+                onChange(s);
+              }} />
               <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
             </div>
           </Section>
 
           {/* Media */}
           <Section title="Media Morphing">
-            <button
-              onClick={onTriggerMedia}
-              className="px-4 py-2 text-sm rounded-lg bg-white/8 hover:bg-white/15 text-white/80 transition-colors cursor-pointer"
-            >
-              Trigger Random (M)
-            </button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={settings.mediaEnabled}
+                  onChange={(e) => set('mediaEnabled', e.target.checked)}
+                  className="accent-white/60 w-4 h-4"
+                />
+                <span className="text-sm text-white/80">Enabled</span>
+              </label>
+              <button
+                onClick={onTriggerMedia}
+                className="px-3 py-1.5 text-sm rounded-lg bg-white/8 hover:bg-white/15 text-white/80 transition-colors cursor-pointer"
+              >
+                Trigger Random (M)
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
               <Slider label="Interval Min (s)" value={settings.imageIntervalMin} min={5} max={60} step={1} onChange={(v) => set('imageIntervalMin', v)} />
               <Slider label="Interval Max (s)" value={settings.imageIntervalMax} min={10} max={120} step={1} onChange={(v) => set('imageIntervalMax', v)} />
@@ -235,9 +290,9 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
             {mediaItems.length > 0 && (
               <div className="grid grid-cols-4 gap-2 pt-2">
                 {mediaItems.map((item, i) => {
-                  const name = item.src.split('/').pop() || '';
+                  const name = (item.src.split('/').pop() || '').replace(/\.[^.]+$/, '');
                   return (
-                    <div key={item.src} className="relative group">
+                    <div key={item.src} className="relative group flex flex-col">
                       <button
                         onClick={() => onTriggerMediaByIndex(i)}
                         className="w-full aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10 hover:border-white/30 transition-colors cursor-pointer"
@@ -245,9 +300,10 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={item.src}
+                          src={item.src.replace(/\.[^.]+$/, '.jpg').replace('/media/', '/media/thumbs/')}
                           alt={name}
-                          className="w-full h-full object-cover grayscale brightness-150 contrast-125"
+                          loading="lazy"
+                          className={`w-full h-full object-cover grayscale brightness-150 contrast-125 ${item.invert ? 'invert' : ''}`}
                         />
                       </button>
                       <button
@@ -257,7 +313,23 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
                       >
                         &times;
                       </button>
-                      <span className="block text-[9px] text-white/40 truncate mt-0.5 px-0.5">{name}</span>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <button
+                          onClick={() => onUpdateMediaItem(i, { ...item, playMode: item.playMode === 'loop' ? 'pingpong' : 'loop' })}
+                          className="text-[9px] px-1 rounded bg-white/8 hover:bg-white/15 text-white/50 cursor-pointer"
+                          title={item.playMode === 'loop' ? 'Loop' : 'Ping-pong'}
+                        >
+                          {item.playMode === 'loop' ? '↻' : '↔'}
+                        </button>
+                        <button
+                          onClick={() => onUpdateMediaItem(i, { ...item, invert: !item.invert })}
+                          className={`text-[9px] px-1 rounded cursor-pointer ${item.invert ? 'bg-white/20 text-white/80' : 'bg-white/8 hover:bg-white/15 text-white/50'}`}
+                          title="Invert brightness"
+                        >
+                          inv
+                        </button>
+                      </div>
+                      <span className="block text-[9px] text-white/40 truncate px-0.5">{name}</span>
                     </div>
                   );
                 })}

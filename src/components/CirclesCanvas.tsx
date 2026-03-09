@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
 import { Settings, MediaItem } from '@/types';
-import { defaultSettings, loadSettings, saveSettings } from '@/lib/settings';
+import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset } from '@/lib/settings';
 import { presets } from '@/lib/presets';
 import SettingsPanel from './SettingsPanel';
 
@@ -14,26 +14,41 @@ export default function CirclesCanvas() {
   const [panelVisible, setPanelVisible] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
   const [activePreset, setActivePreset] = useState<number | null>(null);
+  const [customPresets, setCustomPresets] = useState<(Partial<Omit<Settings, 'useGrid'>> | null)[]>([null, null, null, null, null]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleSettingsChange = useCallback((s: Settings) => {
     setSettings(s);
-    setActivePreset(null);
+    // Keep preset active while editing -- user can save changes
     rendererRef.current?.updateSettings(s);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveSettings(s), 300);
   }, []);
 
   const handleApplyPreset = useCallback((idx: number) => {
-    const p = presets[idx];
-    const newSettings = { ...settings, ...p.settings };
+    // Use custom override if saved, otherwise use default preset
+    const custom = customPresets[idx];
+    const base = presets[idx].settings;
+    const presetSettings = custom || base;
+    const newSettings = { ...settings, ...presetSettings };
     setSettings(newSettings);
     setActivePreset(idx);
     rendererRef.current?.updateSettings(newSettings);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveSettings(newSettings), 300);
-  }, [settings]);
+  }, [settings, customPresets]);
+
+  const handleSavePreset = useCallback(() => {
+    if (activePreset === null) return;
+    // Extract all settings except useGrid (global toggle)
+    const { useGrid, ...rest } = settings;
+    void useGrid;
+    saveCustomPreset(activePreset, rest);
+    const updated = [...customPresets];
+    updated[activePreset] = rest;
+    setCustomPresets(updated);
+  }, [activePreset, settings, customPresets]);
 
   const toggleAudio = useCallback(async () => {
     const r = rendererRef.current;
@@ -54,6 +69,19 @@ export default function CirclesCanvas() {
 
     const saved = loadSettings();
     setSettings(saved);
+
+    // Load presets: localStorage overrides > repo defaults > built-in
+    const localPresets = loadCustomPresets();
+    const hasLocal = localPresets.some(p => p !== null);
+    if (hasLocal) {
+      setCustomPresets(localPresets);
+    } else {
+      loadRepoPresets().then(repo => {
+        const merged = loadCustomPresets(); // re-check in case user saved while loading
+        const hasMerged = merged.some(p => p !== null);
+        if (!hasMerged) setCustomPresets(repo);
+      });
+    }
 
     const renderer = new CirclesRenderer(canvas, saved);
     rendererRef.current = renderer;
@@ -130,12 +158,16 @@ export default function CirclesCanvas() {
       <canvas
         ref={canvasRef}
         className="fixed inset-0 w-full h-full"
-        style={{ display: 'block' }}
+        style={{ display: 'block', touchAction: 'none' }}
+        onClick={() => {
+          if (!panelVisible) setPanelVisible(true);
+        }}
       />
       <SettingsPanel
         settings={settings}
         onChange={handleSettingsChange}
         visible={panelVisible}
+        onClose={() => setPanelVisible(false)}
         audioActive={audioActive}
         onToggleAudio={toggleAudio}
         onTriggerMedia={() => rendererRef.current?.triggerMedia()}
@@ -145,9 +177,16 @@ export default function CirclesCanvas() {
           setMediaItems(updated);
           rendererRef.current?.media.setItems(updated);
         }}
+        onUpdateMediaItem={(idx, item) => {
+          const updated = [...mediaItems];
+          updated[idx] = item;
+          setMediaItems(updated);
+          rendererRef.current?.media.setItems(updated);
+        }}
         mediaItems={mediaItems}
         activePreset={activePreset}
         onApplyPreset={handleApplyPreset}
+        onSavePreset={handleSavePreset}
       />
       {!panelVisible && (
         <button

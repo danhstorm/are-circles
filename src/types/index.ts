@@ -55,6 +55,7 @@ export interface Settings {
   imageIntervalMax: number;
   imageFadeDuration: number;
   imageIntensity: number;
+  mediaEnabled: boolean;
   backgroundColor: string;
   paletteColors: string[];
   hueVariation: number;
@@ -70,7 +71,11 @@ export interface Preset {
   settings: Partial<Omit<Settings, 'useGrid'>>;
 }
 
+export type MediaPlayMode = 'loop' | 'pingpong';
+
 export interface MediaItem {
   src: string;
-  type: 'image' | 'video' | 'gif';
+  type: 'video';
+  playMode: MediaPlayMode;
+  invert: boolean;
 }

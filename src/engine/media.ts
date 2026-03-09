@@ -5,8 +5,8 @@ export class MediaEngine {
   private currentIndex = -1;
   private canvas: OffscreenCanvas;
   private ctx: OffscreenCanvasRenderingContext2D;
-  private imageEl: HTMLImageElement | null = null;
   private videoEl: HTMLVideoElement | null = null;
+  private currentItem: MediaItem | null = null;
   private brightness: Float32Array;
   private sampleWidth = 64;
   private sampleHeight = 64;
@@ -14,9 +14,15 @@ export class MediaEngine {
   private fadeDirection: 'in' | 'out' | 'hold' | 'idle' = 'idle';
   private fadeDuration = 2.5;
   private holdTimer = 0;
+  private holdDuration = 8;
   private nextInterval = 15;
   private idleTimer = 0;
   private queuedIndex = -1;
+  private sampleAccum = 0;
+  private sampleInterval = 1 / 15;
+  // Pingpong state
+  private pingpongReverse = false;
+  private enabled = true;
 
   get intensity() {
     return this.fadeProgress;
@@ -28,15 +34,19 @@ export class MediaEngine {
     this.brightness = new Float32Array(this.sampleWidth * this.sampleHeight);
   }
 
-  setItems(items: MediaItem[]) {
-    this.items = items;
-    if (items.length > 0 && this.currentIndex === -1) {
-      this.pickNext();
+  setEnabled(v: boolean) {
+    this.enabled = v;
+    if (!v && (this.fadeDirection === 'in' || this.fadeDirection === 'hold')) {
+      this.fadeDirection = 'out';
     }
   }
 
+  setItems(items: MediaItem[]) {
+    this.items = items;
+  }
+
   triggerNext() {
-    if (this.items.length === 0) return;
+    if (this.items.length === 0 || !this.enabled) return;
     if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
       this.fadeDirection = 'out';
     } else {
@@ -45,11 +55,9 @@ export class MediaEngine {
   }
 
   triggerByIndex(idx: number) {
-    if (idx < 0 || idx >= this.items.length) return;
-    // If something is already showing, fade it out first then load new
+    if (idx < 0 || idx >= this.items.length || !this.enabled) return;
     if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
       this.fadeDirection = 'out';
-      // Queue the specific one after fade out
       this.queuedIndex = idx;
     } else {
       this.currentIndex = idx;
@@ -59,6 +67,10 @@ export class MediaEngine {
 
   getItems() {
     return this.items;
+  }
+
+  destroy() {
+    this.cleanupCurrent();
   }
 
   private pickNext() {
@@ -71,56 +83,77 @@ export class MediaEngine {
     this.loadMedia(this.items[idx]);
   }
 
-  private loadMedia(item: MediaItem) {
-    this.imageEl = null;
+  private cleanupCurrent() {
     if (this.videoEl) {
       this.videoEl.pause();
-      this.videoEl.src = '';
+      this.videoEl.removeAttribute('src');
+      this.videoEl.load();
       this.videoEl = null;
     }
+    this.currentItem = null;
+    this.pingpongReverse = false;
+  }
 
-    if (item.type === 'video') {
-      const v = document.createElement('video');
-      v.src = item.src;
-      v.crossOrigin = 'anonymous';
-      v.muted = true;
+  private loadMedia(item: MediaItem) {
+    this.cleanupCurrent();
+    this.currentItem = item;
+    this.pingpongReverse = false;
+
+    const v = document.createElement('video');
+    v.src = item.src;
+    v.crossOrigin = 'anonymous';
+    v.muted = true;
+    v.playsInline = true;
+
+    if (item.playMode === 'pingpong') {
       v.loop = false;
-      v.playsInline = true;
-      v.onloadeddata = () => {
-        this.videoEl = v;
-        v.play();
-        this.fadeDirection = 'in';
-        this.fadeProgress = 0;
-      };
-      v.onended = () => {
-        this.fadeDirection = 'out';
-      };
-      v.load();
+      v.onended = () => this.handlePingpongEnd(v);
     } else {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        this.imageEl = img;
-        this.fadeDirection = 'in';
-        this.fadeProgress = 0;
-        this.holdTimer = 0;
-      };
-      img.src = item.src;
+      v.loop = true;
     }
+
+    v.onloadeddata = () => {
+      this.videoEl = v;
+      v.play();
+      this.fadeDirection = 'in';
+      this.fadeProgress = 0;
+      this.holdTimer = 0;
+    };
+    v.load();
+  }
+
+  private handlePingpongEnd(v: HTMLVideoElement) {
+    if (!this.currentItem || this.currentItem.playMode !== 'pingpong') return;
+    this.pingpongReverse = !this.pingpongReverse;
+    v.playbackRate = this.pingpongReverse ? -1 : 1;
+    if (this.pingpongReverse) {
+      // Seek to near end and play backwards
+      v.currentTime = Math.max(0, v.duration - 0.05);
+    } else {
+      v.currentTime = 0;
+    }
+    v.play().catch(() => {
+      // Fallback: some browsers don't support negative playbackRate
+      // Just loop normally
+      v.playbackRate = 1;
+      v.currentTime = 0;
+      v.play();
+    });
   }
 
   private sampleBrightness() {
-    this.ctx.clearRect(0, 0, this.sampleWidth, this.sampleHeight);
-    const source = this.videoEl || this.imageEl;
-    if (!source) return;
+    if (!this.videoEl || this.videoEl.readyState < 2) return;
 
-    this.ctx.drawImage(source as CanvasImageSource, 0, 0, this.sampleWidth, this.sampleHeight);
+    this.ctx.clearRect(0, 0, this.sampleWidth, this.sampleHeight);
+    this.ctx.drawImage(this.videoEl, 0, 0, this.sampleWidth, this.sampleHeight);
     const data = this.ctx.getImageData(0, 0, this.sampleWidth, this.sampleHeight).data;
+
+    const invert = this.currentItem?.invert ?? false;
 
     for (let i = 0; i < this.brightness.length; i++) {
       const idx = i * 4;
       const lum = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) / 255;
-      this.brightness[i] = 1 - lum;
+      this.brightness[i] = invert ? 1 - lum : lum;
     }
   }
 
@@ -135,29 +168,29 @@ export class MediaEngine {
   update(dt: number, intervalMin: number, intervalMax: number, duration: number) {
     this.fadeDuration = duration;
 
+    this.sampleAccum += dt;
+    const shouldSample = this.sampleAccum >= this.sampleInterval;
+    if (shouldSample) this.sampleAccum = 0;
+
     if (this.fadeDirection === 'in') {
       this.fadeProgress = Math.min(1, this.fadeProgress + dt / this.fadeDuration);
+      if (shouldSample) this.sampleBrightness();
       if (this.fadeProgress >= 1) {
-        this.fadeDirection = this.videoEl ? 'hold' : 'hold';
+        this.fadeDirection = 'hold';
         this.holdTimer = 0;
       }
-      this.sampleBrightness();
     } else if (this.fadeDirection === 'hold') {
-      // Always re-sample so animated GIFs update their frames
-      this.sampleBrightness();
-      if (this.videoEl) {
-        if (this.videoEl.ended) {
-          this.fadeDirection = 'out';
-        }
-      } else {
-        this.holdTimer += dt;
-        if (this.holdTimer > 8) {
-          this.fadeDirection = 'out';
-        }
+      if (shouldSample) this.sampleBrightness();
+      this.holdTimer += dt;
+      if (this.holdTimer > this.holdDuration) {
+        this.fadeDirection = 'out';
       }
     } else if (this.fadeDirection === 'out') {
+      // Keep sampling during fade-out so animation continues
+      if (shouldSample) this.sampleBrightness();
       this.fadeProgress = Math.max(0, this.fadeProgress - dt / this.fadeDuration);
       if (this.fadeProgress <= 0) {
+        this.cleanupCurrent();
         if (this.queuedIndex >= 0) {
           const idx = this.queuedIndex;
           this.queuedIndex = -1;
@@ -170,6 +203,7 @@ export class MediaEngine {
         }
       }
     } else {
+      if (!this.enabled) return;
       this.idleTimer += dt;
       if (this.idleTimer >= this.nextInterval && this.items.length > 0) {
         this.pickNext();

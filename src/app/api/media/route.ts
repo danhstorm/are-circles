@@ -3,32 +3,21 @@ import fs from 'fs';
 import path from 'path';
 
 const MEDIA_DIR = path.join(process.cwd(), 'public', 'media');
-
-const EXT_MAP: Record<string, 'image' | 'video' | 'gif'> = {
-  '.png': 'image',
-  '.jpg': 'image',
-  '.jpeg': 'image',
-  '.webp': 'image',
-  '.gif': 'gif',
-  '.mp4': 'video',
-  '.webm': 'video',
-  '.mov': 'video',
-};
+const SUPPORTED_EXT = new Set(['.mp4', '.webm', '.mov']);
 
 export async function GET() {
   try {
     if (!fs.existsSync(MEDIA_DIR)) {
       return NextResponse.json([]);
     }
-    const files = fs.readdirSync(MEDIA_DIR);
+    const files = fs.readdirSync(MEDIA_DIR).filter(f => !fs.statSync(path.join(MEDIA_DIR, f)).isDirectory());
     const items = files
-      .filter((f) => {
-        const ext = path.extname(f).toLowerCase();
-        return ext in EXT_MAP;
-      })
+      .filter((f) => SUPPORTED_EXT.has(path.extname(f).toLowerCase()))
       .map((f) => ({
         src: `/media/${f}`,
-        type: EXT_MAP[path.extname(f).toLowerCase()],
+        type: 'video' as const,
+        playMode: 'loop' as const,
+        invert: false,
       }));
     return NextResponse.json(items);
   } catch {

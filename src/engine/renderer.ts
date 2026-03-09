@@ -11,6 +11,7 @@ export class CirclesRenderer {
   private time = 0;
   private animFrame = 0;
   private running = false;
+  private sortedParticles: Particle[] = [];
   private masterOpacity = 0;
   private fadeTarget = 0;
   private settings: Settings;
@@ -35,7 +36,9 @@ export class CirclesRenderer {
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio, 2);
+    // Limit DPR on mobile for performance (phones have 3x+)
+    const isMobile = w < 768;
+    const dpr = Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2);
     this.canvas.width = w * dpr;
     this.canvas.height = h * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -190,6 +193,10 @@ export class CirclesRenderer {
     this.assignGridPositions();
   }
 
+  private rebuildSortOrder() {
+    this.sortedParticles = [...this.particles].sort((a, b) => a.depth - b.depth);
+  }
+
   private assignGridPositions() {
     if (this.particles.length === 0) return;
     const w = window.innerWidth;
@@ -204,6 +211,7 @@ export class CirclesRenderer {
       p.gridX = (col + 0.5) * cellW;
       p.gridY = (row + 0.5) * cellW;
     });
+    this.rebuildSortOrder();
   }
 
   triggerMedia() {
@@ -246,6 +254,7 @@ export class CirclesRenderer {
     this.running = false;
     cancelAnimationFrame(this.animFrame);
     this.audio.stop();
+    this.media.destroy();
   }
 
   private update(dt: number) {
@@ -271,6 +280,7 @@ export class CirclesRenderer {
       this.soundBurst *= s.soundBurstDecay;
     }
 
+    this.media.setEnabled(s.mediaEnabled);
     this.media.update(dt, s.imageIntervalMin, s.imageIntervalMax, s.imageFadeDuration);
 
     // Wave direction vector
@@ -385,9 +395,7 @@ export class CirclesRenderer {
 
     if (this.masterOpacity <= 0.001) return;
 
-    const sorted = [...this.particles].sort((a, b) => a.depth - b.depth);
-
-    for (const p of sorted) {
+    for (const p of this.sortedParticles) {
       if (p.size < 0.5) continue;
       const r = p.size;
       const softness = this.settings.blurMin + p.blur * (this.settings.blurMax - this.settings.blurMin);
