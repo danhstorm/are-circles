@@ -2,6 +2,7 @@
 
 import { Settings } from '@/types';
 import { presets } from '@/lib/presets';
+import DirectionPicker from './DirectionPicker';
 
 interface Props {
   settings: Settings;
@@ -9,6 +10,12 @@ interface Props {
   visible: boolean;
   audioActive: boolean;
   onToggleAudio: () => void;
+  onTriggerMedia: () => void;
+  onTriggerMediaByIndex: (idx: number) => void;
+  onRemoveMedia: (idx: number) => void;
+  mediaItems: { src: string; type: string }[];
+  activePreset: number | null;
+  onApplyPreset: (idx: number) => void;
 }
 
 function Slider({
@@ -27,9 +34,9 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex justify-between text-xs">
-        <span className="text-white/70">{label}</span>
+    <div className="flex flex-col gap-1.5 py-2 px-1">
+      <div className="flex justify-between text-sm">
+        <span className="text-white/80">{label}</span>
         <span className="text-white/50 tabular-nums">{value.toFixed(step < 1 ? 2 : 0)}</span>
       </div>
       <input
@@ -39,7 +46,7 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="w-full accent-white/60 h-1 cursor-pointer"
+        className="w-full h-1.5 cursor-pointer"
       />
     </div>
   );
@@ -55,19 +62,28 @@ function ColorPicker({
   onChange: (v: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-white/70">{label}</span>
+    <div className="flex items-center gap-3">
+      <span className="text-sm text-white/80">{label}</span>
       <input
         type="color"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent"
+        className="w-8 h-8 rounded border-0 cursor-pointer bg-transparent"
       />
     </div>
   );
 }
 
-export default function SettingsPanel({ settings, onChange, visible, audioActive, onToggleAudio }: Props) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.05)' }}>
+      <span className="text-xs uppercase tracking-widest font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>{title}</span>
+      {children}
+    </div>
+  );
+}
+
+export default function SettingsPanel({ settings, onChange, visible, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, mediaItems, activePreset, onApplyPreset }: Props) {
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     onChange({ ...settings, [key]: value });
   };
@@ -78,133 +94,200 @@ export default function SettingsPanel({ settings, onChange, visible, audioActive
     onChange({ ...settings, paletteColors: colors });
   };
 
-  const applyPreset = (idx: number) => {
-    const p = presets[idx];
-    onChange({ ...settings, ...p.settings });
-  };
-
   return (
     <div
-      className={`fixed top-0 right-0 h-full w-80 bg-black/80 backdrop-blur-md border-l border-white/10 z-50 overflow-y-auto transition-transform duration-300 ${
-        visible ? 'translate-x-0' : 'translate-x-full'
+      className={`fixed top-6 right-6 bottom-6 w-[520px] z-50 transition-all duration-300 ${
+        visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
       }`}
     >
-      <div className="p-4 flex flex-col gap-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-white text-sm font-medium tracking-wide uppercase">Settings</h2>
-          <span className="text-white/30 text-xs">H to toggle</span>
-        </div>
-
-        {/* Presets */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Presets (1-5)</span>
-          <div className="grid grid-cols-3 gap-1.5">
-            {presets.map((p, i) => (
-              <button
-                key={p.name}
-                onClick={() => applyPreset(i)}
-                className="px-2 py-1.5 text-xs rounded bg-white/10 hover:bg-white/20 text-white/80 transition-colors cursor-pointer"
-              >
-                {p.name}
-              </button>
-            ))}
+      <div className="h-full rounded-2xl bg-black/50 backdrop-blur-xl border border-white/10 overflow-y-auto shadow-2xl">
+        <div className="flex flex-col gap-6" style={{ padding: '2rem' }}>
+          {/* Header */}
+          <div className="flex justify-between items-center">
+            <h2 className="text-white text-base font-medium tracking-wide uppercase">Settings</h2>
+            <span className="text-white/30 text-sm">H to toggle</span>
           </div>
-        </div>
 
-        {/* Audio */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Audio</span>
-          <button
-            onClick={onToggleAudio}
-            className={`px-3 py-1.5 text-xs rounded transition-colors cursor-pointer ${
-              audioActive ? 'bg-green-600/40 text-green-300' : 'bg-white/10 text-white/60'
-            }`}
-          >
-            {audioActive ? 'Mic Active' : 'Enable Mic'}
-          </button>
-          <Slider label="Mic Gain" value={settings.micGain} min={0} max={3} step={0.1} onChange={(v) => set('micGain', v)} />
-          <Slider label="Sensitivity" value={settings.soundSensitivity} min={0} max={2} step={0.05} onChange={(v) => set('soundSensitivity', v)} />
-          <Slider label="Smoothing (release)" value={settings.soundSmoothing} min={0.8} max={0.99} step={0.01} onChange={(v) => set('soundSmoothing', v)} />
-        </div>
+          {/* Presets */}
+          <Section title="Presets (1-5)">
+            <div className="grid grid-cols-3 gap-2">
+              {presets.map((p, i) => (
+                <button
+                  key={p.name}
+                  onClick={() => onApplyPreset(i)}
+                  className={`px-3 py-2 text-sm rounded-lg transition-colors cursor-pointer ${
+                    activePreset === i
+                      ? 'bg-white/20 text-white border border-white/30'
+                      : 'bg-white/8 hover:bg-white/15 text-white/80'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </Section>
 
-        {/* Circles */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Circles</span>
-          <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
-          <Slider label="Min Size" value={settings.minSize} min={1} max={40} step={1} onChange={(v) => set('minSize', v)} />
-          <Slider label="Max Size" value={settings.maxSize} min={20} max={200} step={1} onChange={(v) => set('maxSize', v)} />
-          <Slider label="Opacity Min" value={settings.opacityMin} min={0.05} max={0.8} step={0.05} onChange={(v) => set('opacityMin', v)} />
-          <Slider label="Opacity Max" value={settings.opacityMax} min={0.2} max={1} step={0.05} onChange={(v) => set('opacityMax', v)} />
-        </div>
+          {/* Audio */}
+          <Section title="Audio">
+            <button
+              onClick={onToggleAudio}
+              className={`px-4 py-2 text-sm rounded-lg transition-colors cursor-pointer ${
+                audioActive ? 'bg-green-600/30 text-green-300 border border-green-500/30' : 'bg-white/8 text-white/60'
+              }`}
+            >
+              {audioActive ? 'Mic Active' : 'Enable Mic'}
+            </button>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Mic Gain" value={settings.micGain} min={0} max={3} step={0.1} onChange={(v) => set('micGain', v)} />
+              <Slider label="Sensitivity" value={settings.soundSensitivity} min={0} max={3} step={0.05} onChange={(v) => set('soundSensitivity', v)} />
+              <Slider label="Smoothing" value={settings.soundSmoothing} min={0.8} max={0.99} step={0.01} onChange={(v) => set('soundSmoothing', v)} />
+              <Slider label="Burst Decay" value={settings.soundBurstDecay} min={0.8} max={0.99} step={0.01} onChange={(v) => set('soundBurstDecay', v)} />
+            </div>
+          </Section>
 
-        {/* Motion */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Motion</span>
-          <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
-          <Slider label="Noise Scale" value={settings.noiseScale} min={0.0005} max={0.01} step={0.0005} onChange={(v) => set('noiseScale', v)} />
-        </div>
+          {/* Drift */}
+          <Section title="Random Drift">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Strength" value={settings.driftStrength} min={0} max={60} step={1} onChange={(v) => set('driftStrength', v)} />
+              <Slider label="Speed" value={settings.driftSpeed} min={0.01} max={1} step={0.01} onChange={(v) => set('driftSpeed', v)} />
+            </div>
+          </Section>
 
-        {/* Grid */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Layout</span>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.useGrid}
-              onChange={(e) => set('useGrid', e.target.checked)}
-              className="accent-white/60"
-            />
-            <span className="text-xs text-white/70">Grid Mode</span>
-          </label>
-          {settings.useGrid && (
-            <>
-              <Slider label="Grid Blend" value={settings.floatGridBlend} min={0} max={1} step={0.05} onChange={(v) => set('floatGridBlend', v)} />
-              <Slider label="Grid Columns" value={settings.gridColumns} min={5} max={50} step={1} onChange={(v) => set('gridColumns', v)} />
-            </>
-          )}
-        </div>
+          {/* Noise */}
+          <Section title="Noise Pattern">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Strength" value={settings.noiseStrength} min={0} max={2} step={0.05} onChange={(v) => set('noiseStrength', v)} />
+              <Slider label="Size" value={settings.noiseScale} min={0.02} max={1} step={0.02} onChange={(v) => set('noiseScale', v)} />
+              <Slider label="Speed" value={settings.noiseSpeed} min={0} max={2} step={0.05} onChange={(v) => set('noiseSpeed', v)} />
+            </div>
+          </Section>
 
-        {/* Blur / Depth */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Depth & Blur</span>
-          <Slider label="Blur Min" value={settings.blurMin} min={0} max={0.8} step={0.05} onChange={(v) => set('blurMin', v)} />
-          <Slider label="Blur Max" value={settings.blurMax} min={0.1} max={1} step={0.05} onChange={(v) => set('blurMax', v)} />
-          <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
-        </div>
+          {/* Wave */}
+          <Section title="Wave Pattern">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Strength" value={settings.waveStrength} min={0} max={2} step={0.05} onChange={(v) => set('waveStrength', v)} />
+              <Slider label="Size" value={settings.waveFrequency} min={0.02} max={1} step={0.02} onChange={(v) => set('waveFrequency', v)} />
+              <Slider label="Speed" value={settings.waveSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('waveSpeed', v)} />
+            </div>
+            <div className="flex items-center gap-4 px-1 pt-1">
+              <span className="text-sm text-white/80">Direction</span>
+              <DirectionPicker value={settings.waveDirection} onChange={(v) => set('waveDirection', v)} />
+              <span className="text-xs text-white/40 tabular-nums">{Math.round((settings.waveDirection * 180) / Math.PI)}deg</span>
+            </div>
+          </Section>
 
-        {/* Media */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Media Morphing</span>
-          <Slider label="Interval Min (s)" value={settings.imageIntervalMin} min={5} max={60} step={1} onChange={(v) => set('imageIntervalMin', v)} />
-          <Slider label="Interval Max (s)" value={settings.imageIntervalMax} min={10} max={120} step={1} onChange={(v) => set('imageIntervalMax', v)} />
-          <Slider label="Fade Duration (s)" value={settings.imageFadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('imageFadeDuration', v)} />
-          <Slider label="Intensity" value={settings.imageIntensity} min={0} max={1.5} step={0.05} onChange={(v) => set('imageIntensity', v)} />
-        </div>
+          {/* Circles */}
+          <Section title="Circles">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              {!settings.useGrid && (
+                <Slider label="Count" value={settings.circleCount} min={20} max={500} step={1} onChange={(v) => set('circleCount', v)} />
+              )}
+              <Slider label="Min Size" value={settings.minSize} min={1} max={40} step={1} onChange={(v) => set('minSize', v)} />
+              <Slider label="Max Size" value={settings.maxSize} min={20} max={200} step={1} onChange={(v) => set('maxSize', v)} />
+              <Slider label="Opacity Min" value={settings.opacityMin} min={0.05} max={1} step={0.05} onChange={(v) => set('opacityMin', v)} />
+              <Slider label="Opacity Max" value={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(v) => set('opacityMax', v)} />
+              <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
+            </div>
+          </Section>
 
-        {/* Colors */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Colors</span>
-          <ColorPicker label="Background" value={settings.backgroundColor} onChange={(v) => set('backgroundColor', v)} />
-          <div className="flex gap-1.5 items-center">
-            <span className="text-xs text-white/70">Palette</span>
-            {settings.paletteColors.map((c, i) => (
+          {/* Layout */}
+          <Section title="Layout">
+            <label className="flex items-center gap-3 cursor-pointer py-1">
               <input
-                key={i}
-                type="color"
-                value={c}
-                onChange={(e) => setPaletteColor(i, e.target.value)}
-                className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent"
+                type="checkbox"
+                checked={settings.useGrid}
+                onChange={(e) => set('useGrid', e.target.checked)}
+                className="accent-white/60 w-4 h-4"
               />
-            ))}
-          </div>
-          <Slider label="Hue Variation" value={settings.hueVariation} min={0} max={60} step={1} onChange={(v) => set('hueVariation', v)} />
-        </div>
+              <span className="text-sm text-white/80">Grid Mode</span>
+            </label>
+            {settings.useGrid && (
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                <Slider label="Grid Blend" value={settings.floatGridBlend} min={0} max={1} step={0.05} onChange={(v) => set('floatGridBlend', v)} />
+                <Slider label="Columns" value={settings.gridColumns} min={5} max={100} step={1} onChange={(v) => set('gridColumns', v)} />
+              </div>
+            )}
+          </Section>
 
-        {/* Fade */}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs text-white/50 uppercase tracking-wider">Global Fade</span>
-          <Slider label="Fade Duration (s)" value={settings.fadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('fadeDuration', v)} />
-          <span className="text-[10px] text-white/30">Press SPACE to fade in/out</span>
+          {/* Depth & Blur */}
+          <Section title="Depth & Blur">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Blur Min" value={settings.blurMin} min={0} max={0.8} step={0.05} onChange={(v) => set('blurMin', v)} />
+              <Slider label="Blur Max" value={settings.blurMax} min={0.1} max={1} step={0.05} onChange={(v) => set('blurMax', v)} />
+              <Slider label="Depth of Field" value={settings.depthOfField} min={0} max={1} step={0.05} onChange={(v) => set('depthOfField', v)} />
+            </div>
+          </Section>
+
+          {/* Media */}
+          <Section title="Media Morphing">
+            <button
+              onClick={onTriggerMedia}
+              className="px-4 py-2 text-sm rounded-lg bg-white/8 hover:bg-white/15 text-white/80 transition-colors cursor-pointer"
+            >
+              Trigger Random (M)
+            </button>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+              <Slider label="Interval Min (s)" value={settings.imageIntervalMin} min={5} max={60} step={1} onChange={(v) => set('imageIntervalMin', v)} />
+              <Slider label="Interval Max (s)" value={settings.imageIntervalMax} min={10} max={120} step={1} onChange={(v) => set('imageIntervalMax', v)} />
+              <Slider label="Fade (s)" value={settings.imageFadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('imageFadeDuration', v)} />
+              <Slider label="Intensity" value={settings.imageIntensity} min={0} max={1.5} step={0.05} onChange={(v) => set('imageIntensity', v)} />
+            </div>
+            {mediaItems.length > 0 && (
+              <div className="grid grid-cols-4 gap-2 pt-2">
+                {mediaItems.map((item, i) => {
+                  const name = item.src.split('/').pop() || '';
+                  return (
+                    <div key={item.src} className="relative group">
+                      <button
+                        onClick={() => onTriggerMediaByIndex(i)}
+                        className="w-full aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10 hover:border-white/30 transition-colors cursor-pointer"
+                        title={name}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.src}
+                          alt={name}
+                          className="w-full h-full object-cover grayscale brightness-150 contrast-125"
+                        />
+                      </button>
+                      <button
+                        onClick={() => onRemoveMedia(i)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500/80 hover:bg-red-500 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                        title="Remove"
+                      >
+                        &times;
+                      </button>
+                      <span className="block text-[9px] text-white/40 truncate mt-0.5 px-0.5">{name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+
+          {/* Colors */}
+          <Section title="Colors">
+            <ColorPicker label="Background" value={settings.backgroundColor} onChange={(v) => set('backgroundColor', v)} />
+            <div className="flex gap-2 items-center py-1">
+              <span className="text-sm text-white/80">Palette</span>
+              {settings.paletteColors.map((c, i) => (
+                <input
+                  key={i}
+                  type="color"
+                  value={c}
+                  onChange={(e) => setPaletteColor(i, e.target.value)}
+                  className="w-8 h-8 rounded-lg border-0 cursor-pointer bg-transparent"
+                />
+              ))}
+            </div>
+            <Slider label="Hue Variation" value={settings.hueVariation} min={0} max={60} step={1} onChange={(v) => set('hueVariation', v)} />
+          </Section>
+
+          {/* Fade */}
+          <Section title="Global Fade">
+            <Slider label="Fade Duration (s)" value={settings.fadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('fadeDuration', v)} />
+            <span className="text-xs text-white/30">Press SPACE to fade in/out</span>
+          </Section>
         </div>
       </div>
     </div>

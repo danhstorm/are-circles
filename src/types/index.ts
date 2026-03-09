@@ -1,6 +1,8 @@
 export interface Particle {
   x: number;
   y: number;
+  homeX: number;
+  homeY: number;
   vx: number;
   vy: number;
   baseSize: number;
@@ -11,6 +13,7 @@ export interface Particle {
   saturation: number;
   lightness: number;
   blur: number;
+  blurAmount: number;
   opacity: number;
   depth: number;
   gridX: number;
@@ -34,10 +37,19 @@ export interface Settings {
   blurMax: number;
   animationSpeed: number;
   noiseScale: number;
+  noiseStrength: number;
+  noiseSpeed: number;
+  driftStrength: number;
+  driftSpeed: number;
+  waveStrength: number;
+  waveFrequency: number;
+  waveSpeed: number;
+  waveDirection: number;
   floatGridBlend: number;
   gridColumns: number;
   soundSensitivity: number;
   soundSmoothing: number;
+  soundBurstDecay: number;
   micGain: number;
   imageIntervalMin: number;
   imageIntervalMax: number;

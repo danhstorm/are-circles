@@ -3,24 +3,37 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
 import { Settings, MediaItem } from '@/types';
-import { loadSettings, saveSettings } from '@/lib/settings';
+import { defaultSettings, loadSettings, saveSettings } from '@/lib/settings';
 import { presets } from '@/lib/presets';
 import SettingsPanel from './SettingsPanel';
 
 export default function CirclesCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CirclesRenderer | null>(null);
-  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [panelVisible, setPanelVisible] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
+  const [activePreset, setActivePreset] = useState<number | null>(null);
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleSettingsChange = useCallback((s: Settings) => {
     setSettings(s);
+    setActivePreset(null);
     rendererRef.current?.updateSettings(s);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveSettings(s), 300);
   }, []);
+
+  const handleApplyPreset = useCallback((idx: number) => {
+    const p = presets[idx];
+    const newSettings = { ...settings, ...p.settings };
+    setSettings(newSettings);
+    setActivePreset(idx);
+    rendererRef.current?.updateSettings(newSettings);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveSettings(newSettings), 300);
+  }, [settings]);
 
   const toggleAudio = useCallback(async () => {
     const r = rendererRef.current;
@@ -39,13 +52,19 @@ export default function CirclesCanvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const renderer = new CirclesRenderer(canvas, settings);
+    const saved = loadSettings();
+    setSettings(saved);
+
+    const renderer = new CirclesRenderer(canvas, saved);
     rendererRef.current = renderer;
     renderer.start();
 
     fetch('/api/media')
       .then((r) => r.json())
-      .then((items: MediaItem[]) => renderer.media.setItems(items))
+      .then((items: MediaItem[]) => {
+        renderer.media.setItems(items);
+        setMediaItems(items);
+      })
       .catch(() => {});
 
     const handleResize = () => renderer.resize();
@@ -84,6 +103,10 @@ export default function CirclesCanvas() {
           e.preventDefault();
           rendererRef.current?.toggleFade();
           break;
+        case 'm':
+        case 'M':
+          rendererRef.current?.triggerMedia();
+          break;
         case '1':
         case '2':
         case '3':
@@ -91,8 +114,7 @@ export default function CirclesCanvas() {
         case '5': {
           const idx = parseInt(e.key) - 1;
           if (presets[idx]) {
-            const newSettings = { ...settings, ...presets[idx].settings };
-            handleSettingsChange(newSettings);
+            handleApplyPreset(idx);
           }
           break;
         }
@@ -101,20 +123,13 @@ export default function CirclesCanvas() {
 
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [settings, handleSettingsChange]);
-
-  const handleCanvasClick = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  };
+  }, [settings, handleSettingsChange, handleApplyPreset]);
 
   return (
     <>
       <canvas
         ref={canvasRef}
-        onClick={handleCanvasClick}
-        className="fixed inset-0 w-full h-full cursor-pointer"
+        className="fixed inset-0 w-full h-full"
         style={{ display: 'block' }}
       />
       <SettingsPanel
@@ -123,6 +138,16 @@ export default function CirclesCanvas() {
         visible={panelVisible}
         audioActive={audioActive}
         onToggleAudio={toggleAudio}
+        onTriggerMedia={() => rendererRef.current?.triggerMedia()}
+        onTriggerMediaByIndex={(idx) => rendererRef.current?.triggerMediaByIndex(idx)}
+        onRemoveMedia={(idx) => {
+          const updated = mediaItems.filter((_, i) => i !== idx);
+          setMediaItems(updated);
+          rendererRef.current?.media.setItems(updated);
+        }}
+        mediaItems={mediaItems}
+        activePreset={activePreset}
+        onApplyPreset={handleApplyPreset}
       />
       {!panelVisible && (
         <button

@@ -4,6 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Åre Circles',
   description: 'Interactive generative circles visual for Åre Business Forum',
+  icons: { icon: '/favicon.svg' },
 };
 
 export default function RootLayout({

@@ -16,6 +16,7 @@ export class MediaEngine {
   private holdTimer = 0;
   private nextInterval = 15;
   private idleTimer = 0;
+  private queuedIndex = -1;
 
   get intensity() {
     return this.fadeProgress;
@@ -32,6 +33,32 @@ export class MediaEngine {
     if (items.length > 0 && this.currentIndex === -1) {
       this.pickNext();
     }
+  }
+
+  triggerNext() {
+    if (this.items.length === 0) return;
+    if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
+      this.fadeDirection = 'out';
+    } else {
+      this.pickNext();
+    }
+  }
+
+  triggerByIndex(idx: number) {
+    if (idx < 0 || idx >= this.items.length) return;
+    // If something is already showing, fade it out first then load new
+    if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
+      this.fadeDirection = 'out';
+      // Queue the specific one after fade out
+      this.queuedIndex = idx;
+    } else {
+      this.currentIndex = idx;
+      this.loadMedia(this.items[idx]);
+    }
+  }
+
+  getItems() {
+    return this.items;
   }
 
   private pickNext() {
@@ -92,7 +119,8 @@ export class MediaEngine {
 
     for (let i = 0; i < this.brightness.length; i++) {
       const idx = i * 4;
-      this.brightness[i] = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) / 255;
+      const lum = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) / 255;
+      this.brightness[i] = 1 - lum;
     }
   }
 
@@ -115,23 +143,31 @@ export class MediaEngine {
       }
       this.sampleBrightness();
     } else if (this.fadeDirection === 'hold') {
+      // Always re-sample so animated GIFs update their frames
+      this.sampleBrightness();
       if (this.videoEl) {
-        this.sampleBrightness();
         if (this.videoEl.ended) {
           this.fadeDirection = 'out';
         }
       } else {
         this.holdTimer += dt;
-        if (this.holdTimer > 5) {
+        if (this.holdTimer > 8) {
           this.fadeDirection = 'out';
         }
       }
     } else if (this.fadeDirection === 'out') {
       this.fadeProgress = Math.max(0, this.fadeProgress - dt / this.fadeDuration);
       if (this.fadeProgress <= 0) {
-        this.fadeDirection = 'idle';
-        this.idleTimer = 0;
-        this.nextInterval = intervalMin + Math.random() * (intervalMax - intervalMin);
+        if (this.queuedIndex >= 0) {
+          const idx = this.queuedIndex;
+          this.queuedIndex = -1;
+          this.currentIndex = idx;
+          this.loadMedia(this.items[idx]);
+        } else {
+          this.fadeDirection = 'idle';
+          this.idleTimer = 0;
+          this.nextInterval = intervalMin + Math.random() * (intervalMax - intervalMin);
+        }
       }
     } else {
       this.idleTimer += dt;
