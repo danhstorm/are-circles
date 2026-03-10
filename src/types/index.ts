@@ -73,13 +73,18 @@ export interface Settings {
   gridMaxSize: number;
   gravityShape: GravityShape;
   gravityStrength: number;
+  presetTransitionSpeed: number;
+  autoPresetEnabled: boolean;
+  autoPresetIntervalMin: number;
+  autoPresetIntervalMax: number;
+  autoPresetInclude: boolean[];
 }
 
 export type GravityShape = 'none' | 'circle' | 'oval' | 'drop';
 
 export interface Preset {
   name: string;
-  settings: Partial<Omit<Settings, 'useGrid'>>;
+  settings: Partial<Settings>;
 }
 
 export type MediaPlayMode = 'loop' | 'pingpong';

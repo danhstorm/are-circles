@@ -15,7 +15,6 @@ interface Props {
   onTriggerMedia: () => void;
   onTriggerMediaByIndex: (idx: number) => void;
   onRemoveMedia: (idx: number) => void;
-  onResetHidden: () => void;
   onUpdateMediaItem: (idx: number, item: MediaItem) => void;
   mediaItems: MediaItem[];
   activeMediaIndex: number;
@@ -158,18 +157,19 @@ function ColorPicker({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-xl" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.05)' }}>
+    <div className="flex flex-col gap-2 rounded-xl" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.03)' }}>
       <span className="text-xs uppercase tracking-widest font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>{title}</span>
       {children}
     </div>
   );
 }
 
-export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onResetHidden, onUpdateMediaItem, mediaItems, activeMediaIndex, activePreset, onApplyPreset, onSavePreset }: Props) {
+export default function SettingsPanel({ settings, onChange, visible, onClose, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, activePreset, onApplyPreset, onSavePreset }: Props) {
   const [saved, setSaved] = useState(false);
   const savedTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [colorsOpen, setColorsOpen] = useState(false);
 
   useEffect(() => () => { clearTimeout(savedTimer.current); clearTimeout(confirmTimer.current); }, []);
 
@@ -192,12 +192,13 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
 
   return (
     <div
-      className={`fixed top-2 right-2 bottom-2 w-[520px] max-w-[calc(100vw-1rem)] z-50 transition-all duration-300 sm:top-6 sm:right-6 sm:bottom-6 ${
-        visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
-      }`}
+      className={`fixed z-50 transition-all duration-300
+        top-0 right-0 bottom-0 w-full
+        sm:top-6 sm:right-6 sm:bottom-6 sm:w-[520px] sm:max-w-[calc(100vw-3rem)]
+        ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'}`}
     >
-      <div className="h-full rounded-2xl bg-black/50 backdrop-blur-xl border border-white/10 overflow-y-auto shadow-2xl">
-        <div className="flex flex-col gap-6" style={{ padding: '2rem' }}>
+      <div className="h-full sm:rounded-2xl bg-black/30 backdrop-blur-xl border-l sm:border border-white/8 overflow-y-auto shadow-2xl">
+        <div className="flex flex-col gap-6 p-5 sm:p-8">
           {/* Header */}
           <div className="flex justify-between items-center">
             <h2 className="text-white text-base font-medium tracking-wide uppercase">Settings</h2>
@@ -214,7 +215,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
           </div>
 
           {/* Presets */}
-          <Section title="Presets (1-5)">
+          <Section title="Presets (1-9)">
             <div className="grid grid-cols-3 gap-2">
               {presets.map((p, i) => (
                 <button
@@ -241,6 +242,42 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               >
                 {saved ? 'Saved!' : <>Save to &quot;{presets[activePreset]?.name}&quot;</>}
               </button>
+            )}
+            <Slider label="Transition Speed" value={settings.presetTransitionSpeed} min={0.02} max={1} step={0.02} onChange={(v) => set('presetTransitionSpeed', v)} />
+            <label className="flex items-center gap-3 cursor-pointer py-1">
+              <input
+                type="checkbox"
+                checked={settings.autoPresetEnabled}
+                onChange={(e) => set('autoPresetEnabled', e.target.checked)}
+                className="accent-white/60 w-4 h-4"
+              />
+              <span className="text-sm text-white/80">Auto-cycle</span>
+            </label>
+            {settings.autoPresetEnabled && (
+              <>
+                <RangeSlider label="Interval (s)" low={settings.autoPresetIntervalMin} high={settings.autoPresetIntervalMax} min={5} max={120} step={1} onChange={(lo, hi) => onChange({ ...settings, autoPresetIntervalMin: lo, autoPresetIntervalMax: hi })} />
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  {presets.map((p, i) => {
+                    const included = settings.autoPresetInclude[i] ?? true;
+                    return (
+                      <button
+                        key={p.name}
+                        onClick={() => {
+                          const arr = [...settings.autoPresetInclude];
+                          while (arr.length <= i) arr.push(true);
+                          arr[i] = !arr[i];
+                          set('autoPresetInclude', arr);
+                        }}
+                        className={`px-2 py-1 text-[10px] rounded transition-colors cursor-pointer ${
+                          included ? 'bg-white/15 text-white/80' : 'bg-white/5 text-white/30 line-through'
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </Section>
 
@@ -297,7 +334,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               )}
               <RangeSlider label="Size" low={settings.minSize} high={settings.maxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, minSize: lo, maxSize: hi })} />
               {(settings.useGrid || settings.mediaAutoGrid) && (
-                <RangeSlider label="Grid Size" low={settings.gridMinSize} high={settings.gridMaxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, gridMinSize: lo, gridMaxSize: hi })} />
+                <RangeSlider label="Circle size when in grid" low={settings.gridMinSize} high={settings.gridMaxSize} min={1} max={300} step={1} onChange={(lo, hi) => onChange({ ...settings, gridMinSize: lo, gridMaxSize: hi })} />
               )}
               <RangeSlider label="Opacity" low={settings.opacityMin} high={settings.opacityMax} min={0.05} max={1} step={0.05} onChange={(lo, hi) => onChange({ ...settings, opacityMin: lo, opacityMax: hi })} />
               <Slider label="Speed" value={settings.animationSpeed} min={0.05} max={2} step={0.05} onChange={(v) => set('animationSpeed', v)} />
@@ -368,12 +405,6 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               >
                 Trigger Random (M)
               </button>
-              <button
-                onClick={onResetHidden}
-                className="px-3 py-1.5 text-sm rounded-lg bg-white/8 hover:bg-white/15 text-white/50 transition-colors cursor-pointer"
-              >
-                Restore hidden
-              </button>
             </div>
             <label className="flex items-center gap-2 cursor-pointer py-1">
               <input
@@ -385,8 +416,7 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
               <span className="text-sm text-white/80">Form grid on trigger</span>
             </label>
             <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-              <Slider label="Interval Min (s)" value={settings.imageIntervalMin} min={5} max={60} step={1} onChange={(v) => set('imageIntervalMin', v)} />
-              <Slider label="Interval Max (s)" value={settings.imageIntervalMax} min={10} max={120} step={1} onChange={(v) => set('imageIntervalMax', v)} />
+              <RangeSlider label="Interval (s)" low={settings.imageIntervalMin} high={settings.imageIntervalMax} min={5} max={120} step={1} onChange={(lo, hi) => onChange({ ...settings, imageIntervalMin: lo, imageIntervalMax: hi })} />
               <Slider label="Fade (s)" value={settings.imageFadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('imageFadeDuration', v)} />
               <Slider label="Intensity" value={settings.imageIntensity} min={0} max={1.5} step={0.05} onChange={(v) => set('imageIntensity', v)} />
               {settings.mediaAutoGrid && (
@@ -460,29 +490,34 @@ export default function SettingsPanel({ settings, onChange, visible, onClose, au
             )}
           </Section>
 
-          {/* Colors */}
-          <Section title="Colors">
-            <ColorPicker label="Background" value={settings.backgroundColor} onChange={(v) => set('backgroundColor', v)} />
-            <div className="flex gap-2 items-center py-1">
-              <span className="text-sm text-white/80">Palette</span>
-              {settings.paletteColors.map((c, i) => (
-                <input
-                  key={i}
-                  type="color"
-                  value={c}
-                  onChange={(e) => setPaletteColor(i, e.target.value)}
-                  className="w-8 h-8 rounded-lg border-0 cursor-pointer bg-transparent"
-                />
-              ))}
-            </div>
-            <Slider label="Hue Variation" value={settings.hueVariation} min={0} max={60} step={1} onChange={(v) => set('hueVariation', v)} />
-          </Section>
-
-          {/* Fade */}
-          <Section title="Global Fade">
-            <Slider label="Fade Duration (s)" value={settings.fadeDuration} min={0.5} max={8} step={0.5} onChange={(v) => set('fadeDuration', v)} />
-            <span className="text-xs text-white/30">Press SPACE to fade in/out</span>
-          </Section>
+          {/* Colors (collapsible) */}
+          <div className="flex flex-col gap-2 rounded-xl" style={{ padding: '1rem 1.25rem', background: 'rgba(255,255,255,0.03)' }}>
+            <button
+              onClick={() => setColorsOpen(!colorsOpen)}
+              className="flex justify-between items-center cursor-pointer"
+            >
+              <span className="text-xs uppercase tracking-widest font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>Colors</span>
+              <span className="text-white/30 text-xs">{colorsOpen ? '▾' : '▸'}</span>
+            </button>
+            {colorsOpen && (
+              <>
+                <ColorPicker label="Background" value={settings.backgroundColor} onChange={(v) => set('backgroundColor', v)} />
+                <div className="flex gap-2 items-center py-1">
+                  <span className="text-sm text-white/80">Palette</span>
+                  {settings.paletteColors.map((c, i) => (
+                    <input
+                      key={i}
+                      type="color"
+                      value={c}
+                      onChange={(e) => setPaletteColor(i, e.target.value)}
+                      className="w-8 h-8 rounded-lg border-0 cursor-pointer bg-transparent"
+                    />
+                  ))}
+                </div>
+                <Slider label="Hue Variation" value={settings.hueVariation} min={0} max={60} step={1} onChange={(v) => set('hueVariation', v)} />
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -68,13 +68,11 @@ export class MediaEngine {
 
   triggerByIndex(idx: number) {
     if (idx < 0 || idx >= this.items.length || !this.enabled) return;
-    if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
-      this.fadeDirection = 'out';
-      this.queuedIndex = idx;
-    } else {
-      this.currentIndex = idx;
-      this.loadMedia(this.items[idx]);
-    }
+    // Interrupt current and start new immediately
+    this.cleanupCurrent();
+    this.queuedIndex = -1;
+    this.currentIndex = idx;
+    this.loadMedia(this.items[idx]);
   }
 
   getItems() {
@@ -175,6 +173,17 @@ export class MediaEngine {
     const y = Math.floor(ny * (this.sampleHeight - 1));
     const idx = y * this.sampleWidth + x;
     return (this.brightness[idx] || 0) * this.fadeProgress;
+  }
+
+  getRawBrightness(nx: number, ny: number): number {
+    const x = Math.floor(nx * (this.sampleWidth - 1));
+    const y = Math.floor(ny * (this.sampleHeight - 1));
+    const idx = y * this.sampleWidth + x;
+    return this.brightness[idx] || 0;
+  }
+
+  forceSample() {
+    this.sampleBrightness();
   }
 
   update(dt: number, intervalMin: number, intervalMax: number, duration: number) {

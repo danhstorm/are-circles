@@ -28,6 +28,7 @@ export class CirclesRenderer {
   private cursorVx = 0;
   private cursorVy = 0;
   private cursorDown = false;
+  private targetSettings: Settings | null = null;
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -63,6 +64,8 @@ export class CirclesRenderer {
         p.homeY *= sy;
         p.x *= sx;
         p.y *= sy;
+        p.mediaGridX *= sx;
+        p.mediaGridY *= sy;
       }
     }
     this.prevW = w;
@@ -94,6 +97,15 @@ export class CirclesRenderer {
   }
 
   updateSettings(s: Settings) {
+    this.applySettings(s);
+    this.targetSettings = null; // Direct change cancels any transition
+  }
+
+  transitionToSettings(s: Settings) {
+    this.targetSettings = { ...s };
+  }
+
+  private applySettings(s: Settings) {
     const oldUseGrid = this.settings.useGrid;
     const oldCols = this.settings.gridColumns;
     const oldCount = this.settings.circleCount;
@@ -104,7 +116,6 @@ export class CirclesRenderer {
       (s.useGrid && s.gridColumns !== oldCols) ||
       (!s.useGrid && s.circleCount !== oldCount);
 
-    // When switching from grid to float, scatter home positions
     if (oldUseGrid && !s.useGrid) {
       this.scatterParticles();
     }
@@ -115,6 +126,49 @@ export class CirclesRenderer {
       this.assignGridPositions();
     }
     this.audio.setGain(s.micGain);
+  }
+
+  private lerpSettings(dt: number) {
+    if (!this.targetSettings) return;
+    const t = this.targetSettings;
+    const s = this.settings;
+    const speed = s.presetTransitionSpeed * dt;
+    const lerp = (a: number, b: number) => a + (b - a) * Math.min(1, speed);
+    let changed = false;
+    const numericKeys: (keyof Settings)[] = [
+      'circleCount', 'minSize', 'maxSize', 'blurMin', 'blurMax',
+      'animationSpeed', 'noiseScale', 'noiseStrength', 'noiseSpeed',
+      'driftStrength', 'driftSpeed', 'waveStrength', 'waveFrequency', 'waveSpeed',
+      'waveDirection', 'floatGridBlend', 'gridColumns',
+      'soundSensitivity', 'soundSmoothing', 'soundBurstDecay', 'micGain',
+      'imageIntervalMin', 'imageIntervalMax', 'imageFadeDuration', 'imageIntensity',
+      'mediaGridColumns', 'hueVariation', 'opacityMin', 'opacityMax',
+      'depthOfField', 'blurPercent', 'gridMinSize', 'gridMaxSize', 'gravityStrength',
+    ];
+    const next = { ...s };
+    for (const key of numericKeys) {
+      const sv = s[key] as number;
+      const tv = t[key] as number;
+      if (Math.abs(sv - tv) > 0.001) {
+        (next as Record<string, unknown>)[key] = key === 'circleCount' || key === 'gridColumns' || key === 'mediaGridColumns'
+          ? Math.round(lerp(sv, tv))
+          : lerp(sv, tv);
+        changed = true;
+      }
+    }
+    // Snap booleans and non-numeric values immediately
+    if (s.useGrid !== t.useGrid) { next.useGrid = t.useGrid; changed = true; }
+    if (s.mediaEnabled !== t.mediaEnabled) { next.mediaEnabled = t.mediaEnabled; changed = true; }
+    if (s.mediaAutoGrid !== t.mediaAutoGrid) { next.mediaAutoGrid = t.mediaAutoGrid; changed = true; }
+    if (s.gravityShape !== t.gravityShape) { next.gravityShape = t.gravityShape; changed = true; }
+    if (s.backgroundColor !== t.backgroundColor) { next.backgroundColor = t.backgroundColor; changed = true; }
+    if (JSON.stringify(s.paletteColors) !== JSON.stringify(t.paletteColors)) { next.paletteColors = t.paletteColors; changed = true; }
+
+    if (changed) {
+      this.applySettings(next);
+    } else {
+      this.targetSettings = null;
+    }
   }
 
   private scatterParticles() {
@@ -182,6 +236,12 @@ export class CirclesRenderer {
   }
 
   private adjustParticleCount() {
+    // Clean up media extras before adjusting base count
+    if (this.baseParticleCount > 0) {
+      this.particles.length = this.baseParticleCount;
+      this.baseParticleCount = 0;
+    }
+
     const target = this.getEffectiveCount();
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -236,35 +296,27 @@ export class CirclesRenderer {
     this.rebuildSortOrder();
   }
 
-  // Returns 0..1 density at normalized coords (0..1, 0..1) for the gravity shape.
-  // Uses smooth (gaussian-like) falloff so particles feel a soft pull, not a hard edge.
-  private shapeDensity(nx: number, ny: number, shape: GravityShape): number {
-    if (shape === 'none') return 0;
-    const cx = nx - 0.5;
-    const cy = ny - 0.5;
-    let d: number;
-    if (shape === 'circle') {
-      d = Math.sqrt(cx * cx + cy * cy) / 0.6;
-    } else if (shape === 'oval') {
-      d = Math.sqrt((cx * cx) / (0.45 * 0.45) + (cy * cy) / (0.65 * 0.65));
-    } else {
-      // Drop: narrow at top, wide at bottom
-      const dropCy = cy + 0.05;
-      const widthAtY = 0.3 + Math.max(0, dropCy) * 0.7;
-      const yDist = (dropCy + 0.05) / 0.65;
-      d = Math.sqrt((cx * cx) / (widthAtY * widthAtY) + yDist * yDist);
-    }
-    return Math.exp(-d * d * 0.8);
-  }
-
-  // Returns gradient of shape density at a point (approximate via central differences)
-  private shapeGravity(px: number, py: number, w: number, h: number, shape: GravityShape): [number, number] {
+  // Soft focus area: returns a drift bias (0..1) that gently keeps particles
+  // lingering within the shape. Not a hard pull -- just a tendency to stay.
+  private focusBias(px: number, py: number, w: number, h: number, shape: GravityShape): [number, number] {
     if (shape === 'none') return [0, 0];
-    const eps = 0.005;
-    const nx = px / w, ny = py / h;
-    const gx = (this.shapeDensity(nx + eps, ny, shape) - this.shapeDensity(nx - eps, ny, shape)) / (2 * eps);
-    const gy = (this.shapeDensity(nx, ny + eps, shape) - this.shapeDensity(nx, ny - eps, shape)) / (2 * eps);
-    return [gx, gy];
+    const nx = px / w - 0.5;
+    const ny = py / h - 0.5;
+    let insideness: number;
+    if (shape === 'circle') {
+      insideness = 1 - Math.sqrt(nx * nx + ny * ny) / 0.5;
+    } else if (shape === 'oval') {
+      insideness = 1 - Math.sqrt(nx * nx / (0.4 * 0.4) + ny * ny / (0.55 * 0.55));
+    } else {
+      const oy = ny + 0.1;
+      const wAtY = 0.25 + Math.max(0, oy) * 0.6;
+      insideness = 1 - Math.sqrt(nx * nx / (wAtY * wAtY) + (oy / 0.55) * (oy / 0.55));
+    }
+    // Outside the shape: gentle nudge toward center of shape
+    // Inside: no force (free to drift)
+    if (insideness > 0) return [0, 0];
+    const strength = Math.min(1, -insideness * 2);
+    return [-nx * strength, -ny * strength];
   }
 
   private assignMediaGridPositions() {
@@ -274,29 +326,36 @@ export class CirclesRenderer {
     const cellW = w / cols;
     const rows = Math.ceil(h / cellW);
     const cx = w / 2, cy = h / 2;
+    const maxDist = Math.sqrt(cx * cx + cy * cy);
 
-    // Build all cells sorted by distance from viewport center
-    const cells: { c: number; r: number; x: number; y: number; d: number }[] = [];
+    // Sample video brightness for the current frame
+    this.media.forceSample();
+
+    // Build all cells with brightness weight + gentle center bias
+    const cells: { x: number; y: number; key: number; weight: number }[] = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x = (c + 0.5) * cellW;
-        const y = (r + 0.5) * cellW;
-        const dx = x - cx, dy = y - cy;
-        cells.push({ c, r, x, y, d: dx * dx + dy * dy });
+        const x = (c + 0.5) * cellW, y = (r + 0.5) * cellW;
+        const bright = this.media.getRawBrightness(x / w, y / h);
+        const dist = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+        const centerBias = 1 - dist / maxDist * 0.4; // gentle: 1.0 at center, 0.6 at corners
+        cells.push({ x, y, key: r * cols + c, weight: bright * centerBias });
       }
     }
-    cells.sort((a, b) => a.d - b.d);
 
-    // Use only the N closest-to-center cells (N = particle count)
-    const usable = cells.slice(0, this.particles.length);
-    const usableSet = new Set(usable.map(cell => cell.r * cols + cell.c));
+    // Sort by weight descending -- brightest + most-central cells first
+    cells.sort((a, b) => b.weight - a.weight);
+
+    // Real particles get the top N weighted cells
+    const n = this.particles.length;
+    const pool = cells.slice(0, n);
     const taken = new Set<number>();
 
-    // Assign each particle to its nearest available center cell
+    // Assign each real particle to nearest cell in the pool
     const order = this.particles.map((p, i) => {
       let bestD = Infinity, bestIdx = 0;
-      for (let ci = 0; ci < usable.length; ci++) {
-        const dx = p.x - usable[ci].x, dy = p.y - usable[ci].y;
+      for (let ci = 0; ci < pool.length; ci++) {
+        const dx = p.x - pool[ci].x, dy = p.y - pool[ci].y;
         const d = dx * dx + dy * dy;
         if (d < bestD) { bestD = d; bestIdx = ci; }
       }
@@ -304,19 +363,17 @@ export class CirclesRenderer {
     }).sort((a, b) => a.d - b.d);
 
     for (const { i, ci } of order) {
-      let cell = usable[ci];
-      if (taken.has(cell.r * cols + cell.c)) {
-        // Find nearest untaken usable cell
+      let cell = pool[ci];
+      if (taken.has(cell.key)) {
         let bestD = Infinity;
-        for (const u of usable) {
-          const key = u.r * cols + u.c;
-          if (taken.has(key)) continue;
-          const dx = this.particles[i].x - u.x, dy = this.particles[i].y - u.y;
+        for (const c of pool) {
+          if (taken.has(c.key)) continue;
+          const dx = this.particles[i].x - c.x, dy = this.particles[i].y - c.y;
           const d = dx * dx + dy * dy;
-          if (d < bestD) { bestD = d; cell = u; }
+          if (d < bestD) { bestD = d; cell = c; }
         }
       }
-      taken.add(cell.r * cols + cell.c);
+      taken.add(cell.key);
       this.particles[i].mediaGridX = cell.x;
       this.particles[i].mediaGridY = cell.y;
     }
@@ -376,6 +433,9 @@ export class CirclesRenderer {
   }
 
   private update(dt: number) {
+    // Smooth preset transitions
+    this.lerpSettings(dt);
+
     const s = this.settings;
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -428,27 +488,41 @@ export class CirclesRenderer {
           this.baseParticleCount = 0;
         }
         this.baseParticleCount = this.particles.length;
-        const needed = Math.min(this.getMediaGridCount(), 2000);
-        if (needed > this.particles.length) {
-          const hslPalette = s.paletteColors.map(c => this.hslToComponents(c));
-          while (this.particles.length < needed) {
+
+        // Assign real particles to their nearest cells first
+        this.assignMediaGridPositions();
+
+        // Spawn ghost particles for every remaining cell (hidden layer)
+        const cols = s.mediaGridColumns;
+        const cellW = w / cols;
+        const rows = Math.ceil(h / cellW);
+        const totalCells = cols * rows;
+        const takenCells = new Set<number>();
+        for (let pi = 0; pi < this.particles.length; pi++) {
+          const c = Math.round((this.particles[pi].mediaGridX - cellW * 0.5) / cellW);
+          const r = Math.round((this.particles[pi].mediaGridY - cellW * 0.5) / cellW);
+          takenCells.add(r * cols + c);
+        }
+        const hslPalette = s.paletteColors.map(c => this.hslToComponents(c));
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            if (takenCells.has(r * cols + c)) continue;
+            const cx = (c + 0.5) * cellW;
+            const cy = (r + 0.5) * cellW;
             const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
             const depth = Math.random();
-            const x = Math.random() * w;
-            const y = Math.random() * h;
             this.particles.push({
-              x, y, homeX: x, homeY: y, vx: 0, vy: 0,
+              x: cx, y: cy, homeX: cx, homeY: cy, vx: 0, vy: 0,
               baseSize: 0, size: 0, targetSize: 0, color: '',
               hue: pal[0], saturation: pal[1], lightness: pal[2],
               blur: 0, blurAmount: Math.random(),
               opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
-              depth, gridX: 0, gridY: 0, mediaGridX: 0, mediaGridY: 0,
+              depth, gridX: 0, gridY: 0, mediaGridX: cx, mediaGridY: cy,
               noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
             });
           }
-          this.rebuildSortOrder();
         }
-        this.assignMediaGridPositions();
+        this.rebuildSortOrder();
       }
       // Track media intensity directly for synchronized formation/dispersal
       if (mediaActive) {
@@ -471,7 +545,8 @@ export class CirclesRenderer {
     this.prevMediaActive = mediaActive;
 
     // Use a single blend factor for everything: size range, position, and brightness
-    const mediaBlend = this.mediaGridBlend;
+    // In grid mode, particles are already positioned -- just blend size with brightness
+    const mediaBlend = s.useGrid ? mediaFade : this.mediaGridBlend;
 
     // Effective size range: interpolate between regular and grid sizes
     const effectiveMinSize = s.useGrid
@@ -501,6 +576,7 @@ export class CirclesRenderer {
 
     for (let pi = 0; pi < this.particles.length; pi++) {
       const p = this.particles[pi];
+      if (!p) continue;
 
       // ===== POSITION =====
       if (s.useGrid) {
@@ -524,12 +600,12 @@ export class CirclesRenderer {
         p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed;
         p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed;
 
-        // Gravity shape pull (only when not in grid and not during media)
+        // Focus area: gentle bias keeping particles within the shape
         if (s.gravityShape !== 'none' && s.gravityStrength > 0.01 && this.mediaGridBlend < 0.01) {
-          const [gx, gy] = this.shapeGravity(p.homeX, p.homeY, w, h, s.gravityShape);
-          const gStr = s.gravityStrength * 40 * dt;
-          p.homeX += gx * gStr;
-          p.homeY += gy * gStr;
+          const [bx, by] = this.focusBias(p.homeX, p.homeY, w, h, s.gravityShape);
+          const fStr = s.gravityStrength * 15 * dt;
+          p.homeX += bx * fStr * w;
+          p.homeY += by * fStr * h;
         }
 
         // Soft contain
@@ -540,21 +616,21 @@ export class CirclesRenderer {
         if (p.homeY < -margin) p.homeY += (-margin - p.homeY + 1) * pushStrength;
         if (p.homeY > h + margin) p.homeY -= (p.homeY - h - margin + 1) * pushStrength;
 
-        p.x += (p.homeX - p.x) * Math.min(1, dt * 3);
-        p.y += (p.homeY - p.y) * Math.min(1, dt * 3);
-
-        // Blend toward media grid formation when media is active
-        // Stagger per particle using noiseOffsetX as random factor (0..1000 -> 0..1)
+        // Blend between drift position and grid target
         if (this.mediaGridBlend > 0.001) {
           const stagger = (p.noiseOffsetX % 1000) / 1000;
           const staggerSpread = 0.4;
           const pBlend = Math.max(0, Math.min(1,
             (this.mediaGridBlend - stagger * staggerSpread) / (1 - stagger * staggerSpread)
           ));
-          if (pBlend > 0.001) {
-            p.x = p.x * (1 - pBlend) + p.mediaGridX * pBlend;
-            p.y = p.y * (1 - pBlend) + p.mediaGridY * pBlend;
-          }
+          // Smooth lerp: when blend is high, follow grid target; when low, follow drift
+          const targetX = p.homeX * (1 - pBlend) + p.mediaGridX * pBlend;
+          const targetY = p.homeY * (1 - pBlend) + p.mediaGridY * pBlend;
+          p.x += (targetX - p.x) * Math.min(1, dt * 4);
+          p.y += (targetY - p.y) * Math.min(1, dt * 4);
+        } else {
+          p.x += (p.homeX - p.x) * Math.min(1, dt * 3);
+          p.y += (p.homeY - p.y) * Math.min(1, dt * 3);
         }
       }
 
@@ -619,7 +695,7 @@ export class CirclesRenderer {
       );
       const mediaSize = mediaBright * s.imageIntensity * (effectiveMaxSize * 1.2);
 
-      // Extra particles (spawned for media grid) are purely brightness-driven
+      // Extra (ghost) particles are purely brightness-driven and fade by shrinking
       const isExtra = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
       const effectiveMediaBlend = isExtra ? 1 : mediaBlend;
       const blendedSize = patternSize * (1 - effectiveMediaBlend) + mediaSize * effectiveMediaBlend;
@@ -628,7 +704,15 @@ export class CirclesRenderer {
       p.targetSize = blendedSize * burstSizeMult;
       p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 1.5, p.targetSize));
 
-      p.size += (p.targetSize - p.size) * Math.min(1, dt * 4);
+      // Ghosts: slow grow (delayed appearance), fast shrink (quick dispersal)
+      // Real: normal grow, gentle shrink
+      let sizeLerp: number;
+      if (isExtra) {
+        sizeLerp = p.targetSize > p.size ? dt * 0.8 : dt * 8;
+      } else {
+        sizeLerp = p.targetSize > p.size ? dt * 5 : dt * 3;
+      }
+      p.size += (p.targetSize - p.size) * Math.min(1, sizeLerp);
 
       // ===== OPACITY =====
       p.opacity = s.opacityMin + p.depth * (s.opacityMax - s.opacityMin);
@@ -657,7 +741,7 @@ export class CirclesRenderer {
     if (this.masterOpacity <= 0.001) return;
 
     for (const p of this.sortedParticles) {
-      if (p.size < 0.5) continue;
+      if (!p || p.size < 0.5) continue;
       const r = p.size;
 
       ctx.beginPath();

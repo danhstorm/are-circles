@@ -15,11 +15,12 @@ export default function CirclesCanvas() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [panelVisible, setPanelVisible] = useState(false);
   const [audioActive, setAudioActive] = useState(false);
-  const [activePreset, setActivePreset] = useState<number | null>(null);
+  const [activePreset, setActivePreset] = useState<number | null>(0);
   const [customPresets, setCustomPresets] = useState<(Partial<Omit<Settings, 'useGrid'>> | null)[]>([null, null, null, null, null]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const autoCycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const handleSettingsChange = useCallback((s: Settings) => {
     setSettings(s);
@@ -30,26 +31,23 @@ export default function CirclesCanvas() {
   }, []);
 
   const handleApplyPreset = useCallback((idx: number) => {
-    // Use custom override if saved, otherwise use default preset
     const custom = customPresets[idx];
     const base = presets[idx].settings;
     const presetSettings = custom || base;
     const newSettings = { ...settings, ...presetSettings };
     setSettings(newSettings);
     setActivePreset(idx);
-    rendererRef.current?.updateSettings(newSettings);
+    // Smooth transition instead of instant snap
+    rendererRef.current?.transitionToSettings(newSettings);
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveSettings(newSettings), 300);
   }, [settings, customPresets]);
 
   const handleSavePreset = useCallback(() => {
     if (activePreset === null) return;
-    // Extract all settings except useGrid (global toggle)
-    const { useGrid, ...rest } = settings;
-    void useGrid;
-    saveCustomPreset(activePreset, rest);
+    saveCustomPreset(activePreset, settings);
     const updated = [...customPresets];
-    updated[activePreset] = rest;
+    updated[activePreset] = settings;
     setCustomPresets(updated);
   }, [activePreset, settings, customPresets]);
 
@@ -122,6 +120,30 @@ export default function CirclesCanvas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-cycle presets
+  useEffect(() => {
+    clearTimeout(autoCycleTimer.current);
+    if (!settings.autoPresetEnabled) return;
+    const included = settings.autoPresetInclude
+      .map((on, i) => (on && i < presets.length ? i : -1))
+      .filter((i) => i >= 0);
+    if (included.length < 2) return;
+
+    const scheduleNext = () => {
+      const range = settings.autoPresetIntervalMax - settings.autoPresetIntervalMin;
+      const delay = (settings.autoPresetIntervalMin + Math.random() * range) * 1000;
+      autoCycleTimer.current = setTimeout(() => {
+        const candidates = included.filter((i) => i !== activePreset);
+        if (candidates.length === 0) return;
+        const next = candidates[Math.floor(Math.random() * candidates.length)];
+        handleApplyPreset(next);
+        scheduleNext();
+      }, delay);
+    };
+    scheduleNext();
+    return () => clearTimeout(autoCycleTimer.current);
+  }, [settings.autoPresetEnabled, settings.autoPresetIntervalMin, settings.autoPresetIntervalMax, settings.autoPresetInclude, activePreset, handleApplyPreset]);
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
@@ -152,15 +174,10 @@ export default function CirclesCanvas() {
         case 'M':
           rendererRef.current?.triggerMedia();
           break;
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5': {
+        case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8': case '9': {
           const idx = parseInt(e.key) - 1;
-          if (presets[idx]) {
-            handleApplyPreset(idx);
-          }
+          if (presets[idx]) handleApplyPreset(idx);
           break;
         }
       }
@@ -218,18 +235,6 @@ export default function CirclesCanvas() {
             saveHiddenMedia(hidden);
           }
         }}
-        onResetHidden={() => {
-          saveHiddenMedia([]);
-          fetch('/api/media', { cache: 'no-store' })
-            .then((r) => r.json())
-            .then((items: MediaItem[]) => {
-              const overrides = loadMediaOverrides();
-              const merged = items.map((item: MediaItem) => ({ ...item, ...overrides[item.src] }));
-              rendererRef.current?.media.setItems(merged);
-              setMediaItems(merged);
-            })
-            .catch(() => {});
-        }}
         onUpdateMediaItem={(idx, item) => {
           const updated = [...mediaItems];
           updated[idx] = item;
@@ -248,7 +253,7 @@ export default function CirclesCanvas() {
       {!panelVisible && (
         <button
           onClick={() => setPanelVisible(true)}
-          className="fixed top-4 right-4 z-40 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-opacity opacity-0 hover:opacity-100 cursor-pointer pointer-events-none sm:pointer-events-auto"
+          className="fixed top-4 right-4 z-40 w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/15 sm:bg-white/10 hover:bg-white/20 flex items-center justify-center transition-opacity sm:opacity-0 sm:hover:opacity-100 cursor-pointer"
           title="Settings (H)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">

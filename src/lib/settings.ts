@@ -46,6 +46,11 @@ export const defaultSettings: Settings = {
   gridMaxSize: 30,
   gravityShape: 'none',
   gravityStrength: 0.3,
+  presetTransitionSpeed: 0.15,
+  autoPresetEnabled: false,
+  autoPresetIntervalMin: 30,
+  autoPresetIntervalMax: 60,
+  autoPresetInclude: [true, true, true, true, true, true, true, true, true],
 };
 
 export function loadSettings(): Settings {
@@ -69,26 +74,32 @@ export function saveSettings(settings: Settings): void {
 // Loads custom preset overrides: first from localStorage (user's own),
 // falling back to /presets.json (repo defaults shipped by the developer).
 // Returns array of 5 slots, null = use built-in preset.
-export function loadCustomPresets(): (Partial<Omit<Settings, 'useGrid'>> | null)[] {
-  if (typeof window === 'undefined') return [null, null, null, null, null];
+export function loadCustomPresets(): (Partial<Settings> | null)[] {
+  if (typeof window === 'undefined') return new Array(9).fill(null);
   try {
     const stored = localStorage.getItem(PRESETS_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const arr = JSON.parse(stored);
+      while (arr.length < 9) arr.push(null);
+      return arr;
+    }
   } catch {}
-  return [null, null, null, null, null];
+  return new Array(9).fill(null);
 }
 
-// Fetches repo-shipped preset defaults from /presets.json.
-// These are the developer's saved presets that new visitors get.
-export async function loadRepoPresets(): Promise<(Partial<Omit<Settings, 'useGrid'>> | null)[]> {
+export async function loadRepoPresets(): Promise<(Partial<Settings> | null)[]> {
   try {
     const res = await fetch('/presets.json');
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const arr = await res.json();
+      while (arr.length < 9) arr.push(null);
+      return arr;
+    }
   } catch {}
-  return [null, null, null, null, null];
+  return new Array(9).fill(null);
 }
 
-export function saveCustomPreset(idx: number, settings: Partial<Omit<Settings, 'useGrid'>>): void {
+export function saveCustomPreset(idx: number, settings: Partial<Settings>): void {
   if (typeof window === 'undefined') return;
   try {
     const existing = loadCustomPresets();
