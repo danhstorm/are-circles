@@ -22,6 +22,7 @@ export class MediaEngine {
   private sampleInterval = 1 / 15;
   // Pingpong state
   private pingpongReverse = false;
+  private pingpongTime = 0;
   private enabled = true;
 
   get intensity() {
@@ -95,6 +96,7 @@ export class MediaEngine {
 
   private cleanupCurrent() {
     if (this.videoEl) {
+      this.videoEl.playbackRate = 1;
       this.videoEl.pause();
       this.videoEl.removeAttribute('src');
       this.videoEl.load();
@@ -102,6 +104,7 @@ export class MediaEngine {
     }
     this.currentItem = null;
     this.pingpongReverse = false;
+    this.pingpongTime = 0;
   }
 
   private loadMedia(item: MediaItem) {
@@ -118,10 +121,14 @@ export class MediaEngine {
     if (item.playMode === 'pingpong') {
       v.loop = false;
       v.onended = () => {
-        // Forward pass ended, start reverse
         if (this.currentItem?.playMode === 'pingpong' && !this.pingpongReverse) {
           this.pingpongReverse = true;
-          v.pause();
+          this.pingpongTime = v.duration;
+          v.currentTime = v.duration - 0.01;
+          v.playbackRate = -1;
+          v.play().catch(() => {
+            v.pause();
+          });
         }
       };
     } else {
@@ -141,13 +148,24 @@ export class MediaEngine {
   private updatePingpong(dt: number) {
     const v = this.videoEl;
     if (!v || !this.pingpongReverse) return;
-    // Manually seek backwards to simulate reverse playback
-    v.currentTime = Math.max(0, v.currentTime - dt);
-    if (v.currentTime <= 0.05) {
-      // Reverse pass done, start forward again
-      this.pingpongReverse = false;
-      v.currentTime = 0;
-      v.play();
+
+    if (v.playbackRate < 0) {
+      // Native reverse playback: check if we reached the start
+      if (v.currentTime <= 0.05) {
+        this.pingpongReverse = false;
+        v.playbackRate = 1;
+        v.currentTime = 0;
+        v.play();
+      }
+    } else {
+      // Manual fallback: track time independently for reliable seeking
+      this.pingpongTime = Math.max(0, this.pingpongTime - dt);
+      v.currentTime = this.pingpongTime;
+      if (this.pingpongTime <= 0.05) {
+        this.pingpongReverse = false;
+        v.currentTime = 0;
+        v.play();
+      }
     }
   }
 

@@ -33,7 +33,9 @@ export default function CirclesCanvas() {
   const handleApplyPreset = useCallback((idx: number) => {
     const custom = customPresets[idx];
     const base = presets[idx].settings;
-    const presetSettings = custom || base;
+    const presetSettings = { ...(custom || base) };
+    delete (presetSettings as Record<string, unknown>).gridMinSize;
+    delete (presetSettings as Record<string, unknown>).gridMaxSize;
     const newSettings = { ...settings, ...presetSettings };
     setSettings(newSettings);
     setActivePreset(idx);
@@ -45,9 +47,10 @@ export default function CirclesCanvas() {
 
   const handleSavePreset = useCallback(() => {
     if (activePreset === null) return;
-    saveCustomPreset(activePreset, settings);
+    const { gridMinSize: _gmin, gridMaxSize: _gmax, ...presetData } = settings;
+    saveCustomPreset(activePreset, presetData);
     const updated = [...customPresets];
-    updated[activePreset] = settings;
+    updated[activePreset] = presetData;
     setCustomPresets(updated);
   }, [activePreset, settings, customPresets]);
 
