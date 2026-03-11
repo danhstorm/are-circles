@@ -1,60 +1,53 @@
 # Åre Circles - Project Context
 
 ## What This Is
-Interactive generative circles visual for Åre Business Forum, projected via mirrored projectors. Circles animate with noise/wave patterns, sound reactivity, and media morphing (halftone effect). Deployed on Vercel.
+Interactive generative circles visual for Åre Business Forum, projected via mirrored projectors. Circles animate with noise/wave patterns, generative music reactivity, and media morphing (halftone effect). Deployed on Vercel.
 
 ## Tech Stack
-- **Next.js 15** (App Router, TypeScript)
+- **Next.js 16** (App Router, TypeScript)
 - **Canvas 2D** for rendering (no WebGL)
-- **Web Audio API** for mic input / sound reactivity
+- **Web Audio API** for generative music engine (4 instruments, FM synthesis, reverb, delay)
 - **simplex-noise** for organic noise patterns
 - **Tailwind CSS** for settings panel UI
 
 ## Architecture
 
+### Modes
+- **LIVE** (default): Clean canvas, no UI. Keys 1/2/3 switch between 3 live presets. H opens setup.
+- **SETUP**: Right panel = preset editor (select 1/2/3 at top). Left panel = music settings. 9 built-in presets available as templates.
+
 ### Engine (`src/engine/`)
-- **`renderer.ts`** - Main render loop. Manages particles, applies noise/wave/drift size modulation, sound bursts, media crossfade. Canvas 2D with radial gradients for bokeh effect. Depth-sorted draw order (cached). Viewport-relative sizing via `viewScale = min(w,h) / 1080`. Square particle space `max(w,h) x max(w,h)` centered on viewport with edge vignette fade. Smooth preset transitions via `lerpSettings()`. Cursor repulsion/drag interaction. Focus area (gravity shapes) with drift bias.
-- **`audio.ts`** - Web Audio API. FFT analysis with exponential smoothing. Returns bass/mid/high/overall for burst detection.
-- **`media.ts`** - Video brightness sampling. Loads MP4s into `<video>` elements, samples brightness at 15fps into 64x64 grid via OffscreenCanvas. Fade state machine: idle → in → hold → out. Queued index for seamless transitions. Pingpong mode uses manual reverse seeking (not negative playbackRate). `triggerByIndex()` interrupts current playback. `getRawBrightness()` and `forceSample()` for brightness-weighted grid assignment.
+- **`renderer.ts`** - Main render loop. Viewport-relative sizing (`viewScale = min(w,h) / 1080`). Square particle space. Edge vignette via size reduction (not opacity). Smooth preset transitions (smoothstep). Cursor + music swirl impulses. Ghost particles for media grid.
+- **`audio.ts`** - Web Audio API mic input. FFT analysis for sound reactivity.
+- **`media.ts`** - Video brightness sampling at 15fps into 64x64 grid. Per-video intensity support. Fade state machine. Pingpong mode with native reverse playbackRate + fallback.
+- **`music.ts`** - Generative music engine. 4 instruments: Pling (triangle + LFO), Mid 1 & 2 (FM synthesis, 6 sound presets: xylophone/rhodes/breathy/bell/kalimba/glass), Pad (sustained drone chords). ConvolverNode reverb, tempo-synced delay. Pentatonic major/minor scales, 40-80 BPM. Visual reactions: swirl impulses + size pulse.
 
 ### Components (`src/components/`)
-- **`CirclesCanvas.tsx`** - Main canvas component. Manages renderer lifecycle, keyboard shortcuts (1-9 for presets), settings state, media items, pointer event handlers for cursor interaction, auto-cycle preset effect hook. Hydration-safe (starts with defaults, loads localStorage in useEffect). Default activePreset = 0 (first preset on load).
-- **`SettingsPanel.tsx`** - Floating transparent panel (420px wide). Sections: Presets (numbered 1-9, save button, transition speed, auto-cycle with include/exclude toggles), Pattern (Noise + Wave side-by-side), Circles + Depth & Blur (side-by-side), Drift + Layout (side-by-side), Focus Area (gravity shapes), Media (thumbnails 5-col grid, two-step delete confirm, invert/loop per item), Audio (collapsible), Colors (collapsible). Always-visible scrollbar. Padding `p-6 sm:p-7`.
+- **`CirclesCanvas.tsx`** - Main component. Manages renderer + music engine lifecycle, keyboard shortcuts (1-3 presets, H/F/Space/M), AppState, LIVE/SETUP modes. Music starts on first user interaction (AudioContext gesture).
+- **`SetupPanel.tsx`** - Right panel (420px). LIVE/SETUP toggle. Preset editor with template loading. Sections: Pattern (Noise+Wave), Circles+Depth, Drift+Layout, Focus Area, Media (per-video intensity sliders), Audio, Colors (global).
+- **`MusicPanel.tsx`** - Left panel (300px). Global music settings (scale, tempo, master volume). Per-instrument: enable toggle, volume, speed subdivision, trigger %, delay/reverb sends. Visual reaction sliders.
 - **`DirectionPicker.tsx`** - Circular SVG drag picker for wave direction.
 
-### Settings & Presets (`src/lib/`)
-- **`settings.ts`** - Default settings, localStorage load/save. `loadMediaOverrides/saveMediaOverrides` for per-item invert/loop. `loadCustomPresets/saveCustomPreset` for 9 preset slots.
-- **`presets.ts`** - 9 presets: Default, Ethereal, Deep Ocean, Pulse, Grid Pulse, Minimal, Dense Field, Soft Grid (useGrid: true), Tidal. Presets are `Partial<Settings>` (includes `useGrid`).
+### Data Model (`src/types/index.ts`)
+- **`AppState`** - Top-level: version, activePreset, 3 LivePresets, globalColors, mediaOverrides (per-video intensity/invert/loop), mediaGridColumns, transitionSpeed, MusicConfig.
+- **`LivePreset`** - name, `Partial<Settings>`, mediaEnabled, musicInstruments (pling/mid1/mid2/pad booleans).
+- **`MusicConfig`** - scale, tempo, masterVolume, pling/mid1/mid2/pad configs, visualReactions.
+- **Per-preset**: visual settings, media on/off, which instruments enabled.
+- **Global**: colors, media overrides, grid columns, transition speed, all music config.
 
-### Types (`src/types/index.ts`)
-- `Particle` includes: `mediaGridX/Y`, `vx/vy` (velocity for cursor interaction), `blurAmount`, `depth`
-- `Settings` includes: `gridMinSize/gridMaxSize`, `gravityShape/gravityStrength`, `presetTransitionSpeed`, `autoPresetEnabled/autoPresetIntervalMin/autoPresetIntervalMax/autoPresetInclude[]`
-- `GravityShape` = `'none' | 'circle' | 'oval' | 'drop'`
-- `Preset` = `{ name: string; settings: Partial<Settings> }`
-
-### API (`src/app/api/media/route.ts`)
-- GET: auto-discovers .mp4/.webm/.mov files in `public/media/`
-- DELETE: removes files from disk (works in dev, read-only on Vercel)
-- `export const dynamic = 'force-dynamic'` + `{ cache: 'no-store' }` to prevent caching
+### Settings & Persistence (`src/lib/`)
+- **`settings.ts`** - AppState load/save to localStorage. Version-tracked sync with `public/settings.json`. Auto-migration from old format. `buildRendererSettings()` merges preset + globals into renderer Settings.
+- **`presets.ts`** - 9 template presets for "Load from template" feature. Not live presets.
+- **`public/settings.json`** - Canonical settings committed to repo. Content-hash version. On page load, if server version > localStorage version, overwrites localStorage.
+- **`/api/settings`** - Dev-only POST route to export current state to settings.json.
 
 ### Key Rendering Patterns
-- **Viewport-relative sizing**: `viewScale = min(w,h) / 1080` scales all circle sizes, drift strength, cursor forces, grid jitter. A preset looks identical on any screen.
-- **Square particle space**: Particles scatter in a `max(w,h) x max(w,h)` square centered on the viewport. Soft-contain keeps particles within this square. Viewport is just a window into it.
-- **Edge vignette**: Particles near viewport edges fade with quadratic falloff (8% margin). No hard clipping.
-- **Resize remapping**: Square-relative coordinate transform preserves proportions across aspect ratio changes.
-- **Noise/wave size is viewport-relative**: slider value 0-1 = fraction of screen diagonal
-- **Drift is independent**: particles wander via per-particle noise offsets, separate from pattern
-- **Media crossfade**: patterns fade out as media fades in (`patternSize * (1-blend) + mediaSize * blend`)
-- **Media in grid mode**: `mediaBlend` tied to `mediaFade` directly when `useGrid` is true, so brightness drives sizes even when particles are already in grid
-- **Brightness-weighted grid assignment**: samples video first frame, weights cells by `brightness * centerBias`, assigns nearest free cell via spiral search
-- **Ghost particles**: extra particles spawned for media grid cells not covered by real particles. Slow grow (0.8x dt), fast shrink (8x dt) for delayed appearance and quick dispersal.
-- **Staggered formation/dispersal**: per-particle blend offset based on `noiseOffsetX`, smooth lerp toward blended target position
-- **Sound bursts**: exponential smoothing with decay, pumps size multiplicatively
-- **Cursor interaction**: radial repulsion + velocity-based drag-along force, momentum coasting, disabled during grid formation
-- **Focus area**: soft "focus area" shapes (circle/oval/drop) with drift bias instead of hard gravitational pull. Disabled during grid/media.
-- **Smooth preset transitions**: `transitionToSettings()` + `lerpSettings()` with configurable speed. Numeric values lerp, booleans snap immediately.
-- **Auto-cycle presets**: toggle + interval range + include/exclude per preset, interval randomized between min/max.
-- **All media is MP4 video**: GIFs don't animate reliably with canvas drawImage, so everything was converted to looping MP4
+- **Edge vignette = size reduction**: Particles near edges shrink (quadratic falloff, 10% margin). No opacity fade.
+- **All particles travel to grid during media**: No orphan particles floating away. Extras spawn at grid positions, shrink to 0 when unneeded.
+- **Uniform grid sizing**: During media animation, all particles use consistent cell-based sizes scaled by video brightness.
+- **Music swirl impulses**: Notes trigger phantom cursor presses at random positions. Aged once per frame, applied per particle.
+- **Music size pulse**: Note triggers inflate particle sizes, lower pitch = bigger boost.
+- **Smooth preset transitions**: Bounded linear progress + smoothstep. Direct start→target interpolation with definite endpoint.
 
 ## Keyboard Shortcuts
 - `H` - toggle settings panel
@@ -62,23 +55,17 @@ Interactive generative circles visual for Åre Business Forum, projected via mir
 - `ESC` - exit fullscreen
 - `Space` - fade to/from black
 - `M` - trigger random media
-- `1-9` - apply presets
-
-## Adding Media Assets
-1. Place `.mp4` files in `public/media/`
-2. Generate thumbnail: `ffmpeg -i file.mp4 -vf "select=eq(n\,15),scale=120:120:..." -frames:v 1 public/media/thumbs/file.jpg`
-3. The `/api/media` route auto-discovers all .mp4/.webm/.mov files
+- `1-3` - switch live presets
 
 ## Deployment
 - GitHub: `danhstorm/are-circles`
 - Vercel: `are-circles.vercel.app`
 - Push to `main` triggers auto-deploy
-- Manual: `npx vercel --prod`
 
 ## Performance Notes
 - DPR capped at 1.5 on mobile, 2 on desktop
-- Particle sort order cached (not re-sorted every frame)
+- Particle sort order cached
 - Media brightness sampling throttled to 15fps
-- Thumbnails are static JPGs, not autoplay videos
+- Music scheduler uses Web Audio lookahead pattern (25ms interval, 100ms lookahead)
+- Noise buffer cached for breathy instrument
 - Canvas uses `{ alpha: false }` for faster compositing
-- Square particle space only extends particle scatter bounds; grid/media remain viewport-scoped

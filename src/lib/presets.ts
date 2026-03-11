@@ -8,7 +8,9 @@ export const DEFAULT_PALETTE = [
   '#F0B8B8',
 ];
 
-export const presets: Preset[] = [
+// These are templates for the setup panel "Load from template" feature.
+// They are NOT the live presets -- live presets are stored in AppState.
+export const templatePresets: Preset[] = [
   {
     name: 'Calm Drift',
     settings: {

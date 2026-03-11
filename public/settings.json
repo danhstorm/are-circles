@@ -1,0 +1,99 @@
+{
+  "version": "1",
+  "activePreset": 0,
+  "livePresets": [
+    {
+      "name": "Calm",
+      "settings": {
+        "circleCount": 80,
+        "minSize": 8,
+        "maxSize": 120,
+        "blurMin": 0.3,
+        "blurMax": 0.9,
+        "animationSpeed": 0.2,
+        "noiseScale": 0.4,
+        "noiseStrength": 0,
+        "noiseSpeed": 0,
+        "driftStrength": 20,
+        "driftSpeed": 0.15,
+        "waveStrength": 0,
+        "waveFrequency": 0.3,
+        "waveSpeed": 0.2,
+        "mediaEnabled": false,
+        "opacityMin": 0.2,
+        "opacityMax": 0.7,
+        "depthOfField": 0.7
+      },
+      "mediaEnabled": false,
+      "musicInstruments": { "pling": false, "mid1": false, "mid2": false, "pad": false }
+    },
+    {
+      "name": "Breathing",
+      "settings": {
+        "circleCount": 150,
+        "minSize": 4,
+        "maxSize": 90,
+        "blurMin": 0.2,
+        "blurMax": 0.8,
+        "animationSpeed": 0.4,
+        "noiseScale": 0.3,
+        "noiseStrength": 1.0,
+        "noiseSpeed": 0.3,
+        "driftStrength": 15,
+        "driftSpeed": 0.25,
+        "waveStrength": 0.4,
+        "waveFrequency": 0.25,
+        "waveSpeed": 0.4,
+        "mediaEnabled": true,
+        "opacityMin": 0.3,
+        "opacityMax": 0.85,
+        "depthOfField": 0.5
+      },
+      "mediaEnabled": true,
+      "musicInstruments": { "pling": true, "mid1": true, "mid2": false, "pad": true }
+    },
+    {
+      "name": "Active",
+      "settings": {
+        "circleCount": 250,
+        "minSize": 3,
+        "maxSize": 70,
+        "blurMin": 0.1,
+        "blurMax": 0.6,
+        "animationSpeed": 0.8,
+        "noiseScale": 0.15,
+        "noiseStrength": 1.2,
+        "noiseSpeed": 0.6,
+        "driftStrength": 30,
+        "driftSpeed": 0.5,
+        "waveStrength": 0.6,
+        "waveFrequency": 0.12,
+        "waveSpeed": 0.7,
+        "mediaEnabled": true,
+        "opacityMin": 0.4,
+        "opacityMax": 0.95,
+        "depthOfField": 0.3
+      },
+      "mediaEnabled": true,
+      "musicInstruments": { "pling": true, "mid1": true, "mid2": true, "pad": true }
+    }
+  ],
+  "globalColors": {
+    "backgroundColor": "#6B3A4A",
+    "paletteColors": ["#E84530", "#E06850", "#D87888", "#E8A0A0", "#F0B8B8"],
+    "hueVariation": 15
+  },
+  "mediaOverrides": {},
+  "mediaGridColumns": 40,
+  "transitionSpeed": 0.15,
+  "music": {
+    "scale": "pentatonic-major",
+    "tempo": 60,
+    "masterVolume": 0.6,
+    "pling": { "volume": 0.3, "speed": "1/8", "triggerProbability": 0.4, "delay": 0.3, "reverb": 0.5, "lfoSpeed": 2, "lfoDepth": 0.4 },
+    "mid1": { "volume": 0.5, "sound": "rhodes", "speed": "1/4", "triggerProbability": 0.3, "delay": 0.2, "reverb": 0.4 },
+    "mid2": { "volume": 0.4, "sound": "kalimba", "speed": "1/4", "triggerProbability": 0.2, "delay": 0.3, "reverb": 0.5 },
+    "pad": { "volume": 0.25, "chordInterval": 4, "reverb": 0.6 },
+    "visualReactions": { "swirlStrength": 0.5, "swirlRadius": 0.15, "sizePulseStrength": 0.4, "bassSizeBoost": 0.3 }
+  }
+}

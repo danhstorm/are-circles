@@ -24,6 +24,7 @@ export class MediaEngine {
   private pingpongReverse = false;
   private pingpongTime = 0;
   private enabled = true;
+  private intensityMap: Map<string, number> = new Map();
 
   get intensity() {
     return this.fadeProgress;
@@ -56,6 +57,18 @@ export class MediaEngine {
       this.videoEl?.pause();
       this.videoEl = null;
     }
+  }
+
+  setIntensityMap(map: Record<string, number>) {
+    this.intensityMap.clear();
+    for (const [src, val] of Object.entries(map)) {
+      this.intensityMap.set(src, val);
+    }
+  }
+
+  private getCurrentIntensity(): number {
+    if (!this.currentItem) return 0.7;
+    return this.intensityMap.get(this.currentItem.src) ?? 0.7;
   }
 
   triggerNext() {
@@ -190,7 +203,7 @@ export class MediaEngine {
     const x = Math.floor(nx * (this.sampleWidth - 1));
     const y = Math.floor(ny * (this.sampleHeight - 1));
     const idx = y * this.sampleWidth + x;
-    return (this.brightness[idx] || 0) * this.fadeProgress;
+    return (this.brightness[idx] || 0) * this.fadeProgress * this.getCurrentIntensity();
   }
 
   getRawBrightness(nx: number, ny: number): number {

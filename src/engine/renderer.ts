@@ -1,5 +1,5 @@
 import { createNoise3D } from 'simplex-noise';
-import { Particle, Settings, AudioData, GravityShape } from '@/types';
+import { Particle, Settings, AudioData, GravityShape, SwirlImpulse } from '@/types';
 import { AudioEngine } from './audio';
 import { MediaEngine } from './media';
 
@@ -28,6 +28,8 @@ export class CirclesRenderer {
   private cursorVx = 0;
   private cursorVy = 0;
   private cursorDown = false;
+  private swirlImpulses: SwirlImpulse[] = [];
+  private musicSizePulse = 0;
   private targetSettings: Settings | null = null;
   private transitionStart: Settings | null = null;
   private transitionProgress = 0;
@@ -59,8 +61,8 @@ export class CirclesRenderer {
     return [(side - w) / 2, (side - h) / 2];
   }
 
-  private edgeFade(px: number, py: number, w: number, h: number): number {
-    const margin = Math.min(w, h) * 0.08;
+  private edgeSizeFade(px: number, py: number, w: number, h: number): number {
+    const margin = Math.min(w, h) * 0.10;
     if (margin < 1) return 1;
     const fx = Math.min(Math.max(0, px / margin), Math.max(0, (w - px) / margin), 1);
     const fy = Math.min(Math.max(0, py / margin), Math.max(0, (h - py) / margin), 1);
@@ -358,37 +360,27 @@ export class CirclesRenderer {
     const cols = this.settings.mediaGridColumns;
     const cellW = w / cols;
     const rows = Math.ceil(h / cellW);
-    const cx = w / 2, cy = h / 2;
-    const maxDist = Math.sqrt(cx * cx + cy * cy);
+    const totalCells = cols * rows;
 
     // Sample video brightness for the current frame
     this.media.forceSample();
 
-    // Build all cells with brightness weight + gentle center bias
-    const cells: { x: number; y: number; key: number; weight: number }[] = [];
+    // Build all cells
+    const cells: { x: number; y: number; key: number }[] = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const x = (c + 0.5) * cellW, y = (r + 0.5) * cellW;
-        const bright = this.media.getRawBrightness(x / w, y / h);
-        const dist = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
-        const centerBias = 1 - dist / maxDist * 0.4; // gentle: 1.0 at center, 0.6 at corners
-        cells.push({ x, y, key: r * cols + c, weight: bright * centerBias });
+        cells.push({ x: (c + 0.5) * cellW, y: (r + 0.5) * cellW, key: r * cols + c });
       }
     }
 
-    // Sort by weight descending -- brightest + most-central cells first
-    cells.sort((a, b) => b.weight - a.weight);
-
-    // Real particles get the top N weighted cells
-    const n = this.particles.length;
-    const pool = cells.slice(0, n);
+    const n = Math.min(this.particles.length, totalCells);
     const taken = new Set<number>();
 
-    // Assign each real particle to nearest cell in the pool
-    const order = this.particles.map((p, i) => {
+    // Assign each particle to nearest available cell
+    const order = this.particles.slice(0, n).map((p, i) => {
       let bestD = Infinity, bestIdx = 0;
-      for (let ci = 0; ci < pool.length; ci++) {
-        const dx = p.x - pool[ci].x, dy = p.y - pool[ci].y;
+      for (let ci = 0; ci < cells.length; ci++) {
+        const dx = p.x - cells[ci].x, dy = p.y - cells[ci].y;
         const d = dx * dx + dy * dy;
         if (d < bestD) { bestD = d; bestIdx = ci; }
       }
@@ -396,10 +388,10 @@ export class CirclesRenderer {
     }).sort((a, b) => a.d - b.d);
 
     for (const { i, ci } of order) {
-      let cell = pool[ci];
+      let cell = cells[ci];
       if (taken.has(cell.key)) {
         let bestD = Infinity;
-        for (const c of pool) {
+        for (const c of cells) {
           if (taken.has(c.key)) continue;
           const dx = this.particles[i].x - c.x, dy = this.particles[i].y - c.y;
           const d = dx * dx + dy * dy;
@@ -410,6 +402,22 @@ export class CirclesRenderer {
       this.particles[i].mediaGridX = cell.x;
       this.particles[i].mediaGridY = cell.y;
     }
+
+    // Remaining particles (extras beyond cell count) get assigned to the nearest unoccupied cell
+    // or double-up on existing cells
+    for (let i = n; i < this.particles.length; i++) {
+      const ci = i % totalCells;
+      this.particles[i].mediaGridX = cells[ci].x;
+      this.particles[i].mediaGridY = cells[ci].y;
+    }
+  }
+
+  addSwirlImpulses(impulses: SwirlImpulse[]) {
+    for (const imp of impulses) this.swirlImpulses.push(imp);
+  }
+
+  setMusicSizePulse(v: number) {
+    this.musicSizePulse = v;
   }
 
   triggerMedia() {
@@ -517,44 +525,37 @@ export class CirclesRenderer {
     const mediaActive = mediaFade > 0.01;
     if (s.mediaAutoGrid && !s.useGrid) {
       if (mediaActive && !this.prevMediaActive) {
+        // Ensure we have enough particles for the full grid
+        const totalNeeded = this.getMediaGridCount();
         if (this.baseParticleCount === 0) {
           this.baseParticleCount = this.particles.length;
         }
-
-        this.assignMediaGridPositions();
-
-        // Spawn ghost particles only if none exist yet
-        if (this.particles.length <= this.baseParticleCount) {
+        // Spawn extra particles at their target grid positions (size 0, grow in)
+        if (this.particles.length < totalNeeded) {
           const cols = s.mediaGridColumns;
           const cellW = w / cols;
-          const rows = Math.ceil(h / cellW);
-          const takenCells = new Set<number>();
-          for (let pi = 0; pi < this.particles.length; pi++) {
-            const c = Math.round((this.particles[pi].mediaGridX - cellW * 0.5) / cellW);
-            const r = Math.round((this.particles[pi].mediaGridY - cellW * 0.5) / cellW);
-            takenCells.add(r * cols + c);
-          }
           const hslPalette = s.paletteColors.map(c => this.hslToComponents(c));
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              if (takenCells.has(r * cols + c)) continue;
-              const cx = (c + 0.5) * cellW;
-              const cy = (r + 0.5) * cellW;
-              const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
-              const depth = Math.random();
-              this.particles.push({
-                x: cx, y: cy, homeX: cx, homeY: cy, vx: 0, vy: 0,
-                baseSize: 0, size: 0, targetSize: 0, color: '',
-                hue: pal[0], saturation: pal[1], lightness: pal[2],
-                blur: 0, blurAmount: Math.random(),
-                opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
-                depth, gridX: 0, gridY: 0, mediaGridX: cx, mediaGridY: cy,
-                noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
-              });
-            }
+          while (this.particles.length < totalNeeded) {
+            const idx = this.particles.length;
+            const col = idx % cols;
+            const row = Math.floor(idx / cols);
+            const cx = (col + 0.5) * cellW;
+            const cy = (row + 0.5) * cellW;
+            const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
+            const depth = Math.random();
+            this.particles.push({
+              x: cx, y: cy, homeX: cx, homeY: cy, vx: 0, vy: 0,
+              baseSize: 0, size: 0, targetSize: 0, color: '',
+              hue: pal[0], saturation: pal[1], lightness: pal[2],
+              blur: 0, blurAmount: Math.random(),
+              opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
+              depth, gridX: 0, gridY: 0, mediaGridX: cx, mediaGridY: cy,
+              noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
+            });
           }
           this.rebuildSortOrder();
         }
+        this.assignMediaGridPositions();
       }
       // Smooth blend toward media intensity (no instant jumps)
       if (mediaActive) {
@@ -564,11 +565,18 @@ export class CirclesRenderer {
         this.mediaGridBlend += (0 - this.mediaGridBlend) * Math.min(1, dt * 2.5);
         if (this.mediaGridBlend < 0.005) {
           this.mediaGridBlend = 0;
+          // Shrink extras to 0 before removing (they'll already be at size ~0 from brightness)
           if (this.baseParticleCount > 0) {
-            this.particles.length = this.baseParticleCount;
-            this.rebuildSortOrder();
-            this.baseParticleCount = 0;
-            this.adjustParticleCount();
+            let allShrunk = true;
+            for (let ei = this.baseParticleCount; ei < this.particles.length; ei++) {
+              if (this.particles[ei].size > 0.5) { allShrunk = false; break; }
+            }
+            if (allShrunk) {
+              this.particles.length = this.baseParticleCount;
+              this.rebuildSortOrder();
+              this.baseParticleCount = 0;
+              this.adjustParticleCount();
+            }
           }
         }
       }
@@ -602,6 +610,14 @@ export class CirclesRenderer {
     }
     const cursorRadius = Math.sqrt(w * w + h * h) * 0.18 * vs;
     const cursorRadiusSq = cursorRadius * cursorRadius;
+
+    // Age swirl impulses once per frame (not per particle)
+    for (let si = this.swirlImpulses.length - 1; si >= 0; si--) {
+      this.swirlImpulses[si].age += dt;
+      if (this.swirlImpulses[si].age >= this.swirlImpulses[si].maxAge) {
+        this.swirlImpulses.splice(si, 1);
+      }
+    }
 
     for (let pi = 0; pi < this.particles.length; pi++) {
       const p = this.particles[pi];
@@ -697,6 +713,26 @@ export class CirclesRenderer {
         if (Math.abs(p.vx) < 0.1 && Math.abs(p.vy) < 0.1) { p.vx = 0; p.vy = 0; }
       }
 
+      // ===== MUSIC SWIRL IMPULSES =====
+      for (const imp of this.swirlImpulses) {
+        const ix = imp.x * w;
+        const iy = imp.y * h;
+        const cdx = p.x - ix;
+        const cdy = p.y - iy;
+        const distSq = cdx * cdx + cdy * cdy;
+        const swirlRadius = Math.sqrt(w * w + h * h) * 0.12 * imp.strength;
+        if (distSq < swirlRadius * swirlRadius && distSq > 1) {
+          const dist = Math.sqrt(distSq);
+          const proximity = 1 - dist / swirlRadius;
+          const fade = 1 - imp.age / imp.maxAge;
+          const force = proximity * proximity * fade * imp.strength * 2000 * vs * dt;
+          const nx = cdx / dist;
+          const ny = cdy / dist;
+          p.vx += nx * force + imp.dx * w * fade * dt * 50;
+          p.vy += ny * force + imp.dy * h * fade * dt * 50;
+        }
+      }
+
       // ===== SIZE: patterns drive size =====
       let sizeMod = 0.5;
       const vp = Math.sqrt(w * w + h * h);
@@ -726,31 +762,38 @@ export class CirclesRenderer {
         Math.max(0, Math.min(1, p.x / w)),
         Math.max(0, Math.min(1, p.y / h))
       );
-      const mediaSize = mediaBright * s.imageIntensity * (effectiveMaxSize * 1.2);
+      // In media grid: use uniform cell-based size scaled by brightness
+      const gridCellSize = effectiveMaxSize * 0.5;
+      const mediaSize = mediaBright * gridCellSize;
 
-      // Extra (ghost) particles are purely brightness-driven and fade by shrinking
+      // All particles blend toward grid during media (no special ghost treatment)
       const isExtra = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
-      const effectiveMediaBlend = isExtra ? 1 : mediaBlend;
+      const effectiveMediaBlend = isExtra ? Math.min(1, mediaBlend * 2) : mediaBlend;
       const blendedSize = patternSize * (1 - effectiveMediaBlend) + mediaSize * effectiveMediaBlend;
 
+      // Music size pulse + audio burst
+      const musicMult = 1 + this.musicSizePulse * 1.5 * (0.5 + p.depth * 0.5);
       const burstSizeMult = 1 + this.soundBurst * 2.0 * (0.5 + p.depth * 0.5);
-      p.targetSize = blendedSize * burstSizeMult;
+      p.targetSize = blendedSize * burstSizeMult * musicMult;
       p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 1.5, p.targetSize));
 
-      // Ghosts: slow grow (delayed appearance), fast shrink (quick dispersal)
-      // Real: normal grow, gentle shrink
+      // Edge vignette via size reduction (not opacity)
+      const eFade = this.edgeSizeFade(p.x, p.y, w, h);
+      p.targetSize *= eFade;
+
+      // Smooth size transition: grow moderately, shrink gently
+      const isGrowing = p.targetSize > p.size;
       let sizeLerp: number;
       if (isExtra) {
-        sizeLerp = p.targetSize > p.size ? dt * 0.25 : dt * 8;
+        sizeLerp = isGrowing ? dt * 0.4 : dt * 6;
       } else {
-        sizeLerp = p.targetSize > p.size ? dt * 5 : dt * 3;
+        sizeLerp = isGrowing ? dt * 5 : dt * 3;
       }
       p.size += (p.targetSize - p.size) * Math.min(1, sizeLerp);
 
-      // ===== OPACITY with edge vignette =====
+      // ===== OPACITY (no edge fade -- edges handled by size) =====
       const baseOpacity = s.opacityMin + p.depth * (s.opacityMax - s.opacityMin);
-      const eFade = this.edgeFade(p.x, p.y, w, h);
-      p.opacity = baseOpacity * eFade;
+      p.opacity = baseOpacity;
 
       // ===== COLOR (no audio, only noise-based hue drift) =====
       const hueShift = this.noise3D(p.noiseOffsetX + 200, 0, this.time * 0.2) * s.hueVariation;

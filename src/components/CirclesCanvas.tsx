@@ -2,57 +2,86 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
-import { Settings, MediaItem } from '@/types';
-import { defaultSettings, loadSettings, saveSettings, loadCustomPresets, loadRepoPresets, saveCustomPreset, loadMediaOverrides, saveMediaOverrides, loadHiddenMedia, saveHiddenMedia } from '@/lib/settings';
-import { presets } from '@/lib/presets';
-import SettingsPanel from './SettingsPanel';
+import { MusicEngine } from '@/engine/music';
+import { AppState, MediaItem } from '@/types';
+import { defaultAppState, defaultSettings, loadAppState, saveAppState, buildRendererSettings, syncWithServer, getMediaOverride, loadHiddenMedia } from '@/lib/settings';
+import SetupPanel from './SetupPanel';
+import MusicPanel from './MusicPanel';
 
 export default function CirclesCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<CirclesRenderer | null>(null);
+  const musicRef = useRef<MusicEngine | null>(null);
   const dragRef = useRef(false);
   const pointerStartRef = useRef({ x: 0, y: 0 });
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
+
+  const [appState, setAppState] = useState<AppState>(defaultAppState);
   const [panelVisible, setPanelVisible] = useState(false);
+  const [mode, setMode] = useState<'live' | 'setup'>('live');
   const [audioActive, setAudioActive] = useState(false);
-  const [activePreset, setActivePreset] = useState<number | null>(0);
-  const [customPresets, setCustomPresets] = useState<(Partial<Omit<Settings, 'useGrid'>> | null)[]>([null, null, null, null, null]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
-  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const autoCycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [editingPreset, setEditingPreset] = useState(0);
 
-  const handleSettingsChange = useCallback((s: Settings) => {
-    setSettings(s);
-    // Keep preset active while editing -- user can save changes
-    rendererRef.current?.updateSettings(s);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const autoSave = useCallback((state: AppState) => {
     clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveSettings(s), 300);
+    saveTimer.current = setTimeout(() => saveAppState(state), 200);
   }, []);
 
-  const handleApplyPreset = useCallback((idx: number) => {
-    const custom = customPresets[idx];
-    const base = presets[idx].settings;
-    const presetSettings = { ...(custom || base) };
-    delete (presetSettings as Record<string, unknown>).gridMinSize;
-    delete (presetSettings as Record<string, unknown>).gridMaxSize;
-    const newSettings = { ...settings, ...presetSettings };
-    setSettings(newSettings);
-    setActivePreset(idx);
-    // Smooth transition instead of instant snap
-    rendererRef.current?.transitionToSettings(newSettings);
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveSettings(newSettings), 300);
-  }, [settings, customPresets]);
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
 
-  const handleSavePreset = useCallback(() => {
-    if (activePreset === null) return;
-    const { gridMinSize: _gmin, gridMaxSize: _gmax, ...presetData } = settings;
-    saveCustomPreset(activePreset, presetData);
-    const updated = [...customPresets];
-    updated[activePreset] = presetData;
-    setCustomPresets(updated);
-  }, [activePreset, settings, customPresets]);
+  const applyPreset = useCallback((idx: number, state: AppState, transition = true) => {
+    const next = { ...state, activePreset: idx };
+    setAppState(next);
+    autoSave(next);
+    const settings = buildRendererSettings(next.livePresets[idx], next);
+    if (transition) {
+      rendererRef.current?.transitionToSettings(settings);
+    } else {
+      rendererRef.current?.updateSettings(settings);
+    }
+
+    // Music: enable/disable instruments per preset, fade in/out
+    const music = musicRef.current;
+    if (music) {
+      const preset = next.livePresets[idx];
+      const anyEnabled = Object.values(preset.musicInstruments).some(v => v);
+      if (anyEnabled) {
+        if (!music.isPlaying) music.start();
+        else music.fadeIn(2);
+        music.setInstrumentEnabled('pling', preset.musicInstruments.pling);
+        music.setInstrumentEnabled('mid1', preset.musicInstruments.mid1);
+        music.setInstrumentEnabled('mid2', preset.musicInstruments.mid2);
+        music.setInstrumentEnabled('pad', preset.musicInstruments.pad);
+      } else {
+        music.fadeOut(2);
+      }
+    }
+  }, [autoSave]);
+
+  const updateAppState = useCallback((updater: (prev: AppState) => AppState) => {
+    setAppState(prev => {
+      const next = updater(prev);
+      autoSave(next);
+      const settings = buildRendererSettings(next.livePresets[next.activePreset], next);
+      rendererRef.current?.updateSettings(settings);
+
+      // Update media intensity map
+      const intensityMap: Record<string, number> = {};
+      for (const [src, ov] of Object.entries(next.mediaOverrides)) {
+        intensityMap[src] = ov.intensity;
+      }
+      rendererRef.current?.media.setIntensityMap(intensityMap);
+
+      // Update music config
+      musicRef.current?.updateConfig(next.music);
+
+      return next;
+    });
+  }, [autoSave]);
 
   const toggleAudio = useCallback(async () => {
     const r = rendererRef.current;
@@ -63,45 +92,76 @@ export default function CirclesCanvas() {
     } else {
       const ok = await r.audio.start();
       setAudioActive(ok);
-      if (ok) r.audio.setGain(settings.micGain);
     }
-  }, [settings.micGain]);
+  }, []);
 
+  // Init
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const saved = loadSettings();
-    setSettings(saved);
+    let state = loadAppState();
 
-    // Load presets: localStorage overrides > repo defaults > built-in
-    const localPresets = loadCustomPresets();
-    const hasLocal = localPresets.some(p => p !== null);
-    if (hasLocal) {
-      setCustomPresets(localPresets);
-    } else {
-      loadRepoPresets().then(repo => {
-        const merged = loadCustomPresets(); // re-check in case user saved while loading
-        const hasMerged = merged.some(p => p !== null);
-        if (!hasMerged) setCustomPresets(repo);
-      });
-    }
+    syncWithServer(state).then(synced => {
+      state = synced;
+      setAppState(state);
+      const settings = buildRendererSettings(state.livePresets[state.activePreset], state);
+      rendererRef.current?.updateSettings(settings);
+    });
 
-    const renderer = new CirclesRenderer(canvas, saved);
+    setAppState(state);
+
+    const settings = buildRendererSettings(state.livePresets[state.activePreset], state);
+    const renderer = new CirclesRenderer(canvas, settings);
     rendererRef.current = renderer;
+
+    // Set intensity map from saved overrides
+    const intensityMap: Record<string, number> = {};
+    for (const [src, ov] of Object.entries(state.mediaOverrides)) {
+      intensityMap[src] = ov.intensity;
+    }
+    renderer.media.setIntensityMap(intensityMap);
+
     renderer.start();
 
+    // Music engine (deferred start on first user interaction for AudioContext)
+    const music = new MusicEngine(state.music);
+    musicRef.current = music;
+    const initPreset = state.livePresets[state.activePreset];
+    const startMusic = async () => {
+      const anyEnabled = Object.values(initPreset.musicInstruments).some(v => v);
+      if (anyEnabled) {
+        await music.start();
+        music.setInstrumentEnabled('pling', initPreset.musicInstruments.pling);
+        music.setInstrumentEnabled('mid1', initPreset.musicInstruments.mid1);
+        music.setInstrumentEnabled('mid2', initPreset.musicInstruments.mid2);
+        music.setInstrumentEnabled('pad', initPreset.musicInstruments.pad);
+      }
+      document.removeEventListener('pointerdown', startMusic);
+      document.removeEventListener('keydown', startMusic);
+    };
+    document.addEventListener('pointerdown', startMusic);
+    document.addEventListener('keydown', startMusic);
+
+    // Pump music reactions into renderer
+    const musicPump = setInterval(() => {
+      if (!music.isPlaying) return;
+      const swirls = music.getSwirlImpulses();
+      if (swirls.length > 0) renderer.addSwirlImpulses(swirls);
+      renderer.setMusicSizePulse(music.getSizePulse());
+    }, 16);
+
+    // Load media
     fetch('/api/media', { cache: 'no-store' })
-      .then((r) => r.json())
+      .then(r => r.json())
       .then((items: MediaItem[]) => {
         const hidden = loadHiddenMedia();
-        const overrides = loadMediaOverrides();
         const merged = items
           .filter((item: MediaItem) => !hidden.includes(item.src))
-          .map((item: MediaItem) => ({
-            ...item,
-            ...overrides[item.src],
-          }));
+          .map((item: MediaItem) => {
+            const ov = getMediaOverride(state, item.src);
+            return { ...item, playMode: ov.playMode, invert: ov.invert };
+          });
         renderer.media.setItems(merged);
         setMediaItems(merged);
       })
@@ -110,85 +170,53 @@ export default function CirclesCanvas() {
     const handleResize = () => renderer.resize();
     window.addEventListener('resize', handleResize);
 
-    // Poll active media index for UI highlight
     const mediaIndexPoll = setInterval(() => {
       setActiveMediaIndex(renderer.media.activeIndex);
     }, 200);
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      document.removeEventListener('pointerdown', startMusic);
+      document.removeEventListener('keydown', startMusic);
       clearInterval(mediaIndexPoll);
+      clearInterval(musicPump);
       renderer.stop();
+      music.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-cycle presets
-  useEffect(() => {
-    clearTimeout(autoCycleTimer.current);
-    if (!settings.autoPresetEnabled) return;
-    const included = settings.autoPresetInclude
-      .map((on, i) => (on && i < presets.length ? i : -1))
-      .filter((i) => i >= 0);
-    if (included.length < 2) return;
-
-    const scheduleNext = () => {
-      const range = settings.autoPresetIntervalMax - settings.autoPresetIntervalMin;
-      const delay = (settings.autoPresetIntervalMin + Math.random() * range) * 1000;
-      autoCycleTimer.current = setTimeout(() => {
-        const candidates = included.filter((i) => i !== activePreset);
-        if (candidates.length === 0) return;
-        const next = candidates[Math.floor(Math.random() * candidates.length)];
-        handleApplyPreset(next);
-        scheduleNext();
-      }, delay);
-    };
-    scheduleNext();
-    return () => clearTimeout(autoCycleTimer.current);
-  }, [settings.autoPresetEnabled, settings.autoPresetIntervalMin, settings.autoPresetIntervalMax, settings.autoPresetInclude, activePreset, handleApplyPreset]);
-
+  // Keyboard
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
-
       switch (e.key) {
-        case 'f':
-        case 'F':
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
-          } else {
-            document.documentElement.requestFullscreen();
-          }
+        case 'f': case 'F':
+          document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
           break;
         case 'Escape':
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
-          }
+          if (document.fullscreenElement) document.exitFullscreen();
           break;
-        case 'h':
-        case 'H':
-          setPanelVisible((v) => !v);
+        case 'h': case 'H':
+          setPanelVisible(v => !v);
           break;
         case ' ':
           e.preventDefault();
           rendererRef.current?.toggleFade();
           break;
-        case 'm':
-        case 'M':
+        case 'm': case 'M':
           rendererRef.current?.triggerMedia();
           break;
-        case '1': case '2': case '3': case '4':
-        case '5': case '6': case '7': case '8': case '9': {
+        case '1': case '2': case '3': {
           const idx = parseInt(e.key) - 1;
-          if (presets[idx]) handleApplyPreset(idx);
+          applyPreset(idx, appStateRef.current);
           break;
         }
       }
     };
-
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [settings, handleSettingsChange, handleApplyPreset]);
+  }, [applyPreset]);
 
   return (
     <>
@@ -211,13 +239,27 @@ export default function CirclesCanvas() {
         }}
         onPointerUp={() => rendererRef.current?.setCursor(0, 0, false)}
         onPointerLeave={() => rendererRef.current?.setCursor(0, 0, false)}
-
       />
-      <SettingsPanel
-        settings={settings}
-        onChange={handleSettingsChange}
+
+      {/* Music panel (left) */}
+      <MusicPanel
         visible={panelVisible}
+        appState={appState}
+        editingPreset={editingPreset}
+        onUpdate={updateAppState}
+      />
+
+      {/* Setup panel (right) */}
+      <SetupPanel
+        visible={panelVisible}
+        mode={mode}
+        onSetMode={setMode}
         onClose={() => setPanelVisible(false)}
+        appState={appState}
+        editingPreset={editingPreset}
+        onSetEditingPreset={setEditingPreset}
+        onUpdate={updateAppState}
+        onApplyPreset={(idx) => applyPreset(idx, appState)}
         audioActive={audioActive}
         onToggleAudio={toggleAudio}
         onTriggerMedia={() => rendererRef.current?.triggerMedia()}
@@ -233,9 +275,6 @@ export default function CirclesCanvas() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ src: removed.src }),
             }).catch(() => {});
-            const hidden = loadHiddenMedia();
-            hidden.push(removed.src);
-            saveHiddenMedia(hidden);
           }
         }}
         onUpdateMediaItem={(idx, item) => {
@@ -243,16 +282,17 @@ export default function CirclesCanvas() {
           updated[idx] = item;
           setMediaItems(updated);
           rendererRef.current?.media.setItems(updated);
-          const overrides = loadMediaOverrides();
-          overrides[item.src] = { playMode: item.playMode, invert: item.invert };
-          saveMediaOverrides(overrides);
+          updateAppState(prev => {
+            const next = { ...prev, mediaOverrides: { ...prev.mediaOverrides } };
+            next.mediaOverrides[item.src] = { playMode: item.playMode, invert: item.invert, intensity: getMediaOverride(prev, item.src).intensity };
+            return next;
+          });
         }}
         mediaItems={mediaItems}
         activeMediaIndex={activeMediaIndex}
-        activePreset={activePreset}
-        onApplyPreset={handleApplyPreset}
-        onSavePreset={handleSavePreset}
       />
+
+      {/* Settings button (only in live mode when panel hidden) */}
       {!panelVisible && (
         <button
           onClick={() => setPanelVisible(true)}
