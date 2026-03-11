@@ -33,7 +33,7 @@ export default function CirclesCanvas() {
   const appStateRef = useRef(appState);
   appStateRef.current = appState;
 
-  const applyPreset = useCallback((idx: number, state: AppState, transition = true) => {
+  const applyPreset = useCallback(async (idx: number, state: AppState, transition = true) => {
     const next = { ...state, activePreset: idx };
     setAppState(next);
     autoSave(next);
@@ -50,7 +50,7 @@ export default function CirclesCanvas() {
       const preset = next.livePresets[idx];
       const anyEnabled = Object.values(preset.musicInstruments).some(v => v);
       if (anyEnabled) {
-        if (!music.isPlaying) music.start();
+        if (!music.isPlaying) await music.start();
         else music.fadeIn(2);
         music.setInstrumentEnabled('pling', preset.musicInstruments.pling);
         music.setInstrumentEnabled('mid1', preset.musicInstruments.mid1);
@@ -127,18 +127,21 @@ export default function CirclesCanvas() {
     // Music engine (deferred start on first user interaction for AudioContext)
     const music = new MusicEngine(state.music);
     musicRef.current = music;
-    const initPreset = state.livePresets[state.activePreset];
     const startMusic = async () => {
-      const anyEnabled = Object.values(initPreset.musicInstruments).some(v => v);
-      if (anyEnabled) {
-        await music.start();
-        music.setInstrumentEnabled('pling', initPreset.musicInstruments.pling);
-        music.setInstrumentEnabled('mid1', initPreset.musicInstruments.mid1);
-        music.setInstrumentEnabled('mid2', initPreset.musicInstruments.mid2);
-        music.setInstrumentEnabled('pad', initPreset.musicInstruments.pad);
-      }
       document.removeEventListener('pointerdown', startMusic);
       document.removeEventListener('keydown', startMusic);
+      // Always init AudioContext on first gesture so it's ready
+      await music.start();
+      // Enable instruments from whatever preset is currently active
+      const current = appStateRef.current;
+      const preset = current.livePresets[current.activePreset];
+      music.setInstrumentEnabled('pling', preset.musicInstruments.pling);
+      music.setInstrumentEnabled('mid1', preset.musicInstruments.mid1);
+      music.setInstrumentEnabled('mid2', preset.musicInstruments.mid2);
+      music.setInstrumentEnabled('pad', preset.musicInstruments.pad);
+      // If no instruments enabled, fade out but keep engine ready
+      const anyEnabled = Object.values(preset.musicInstruments).some(v => v);
+      if (!anyEnabled) music.fadeOut(0.1);
     };
     document.addEventListener('pointerdown', startMusic);
     document.addEventListener('keydown', startMusic);

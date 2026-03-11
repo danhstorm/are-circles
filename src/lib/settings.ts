@@ -63,7 +63,7 @@ function makeDefaultLivePresets(): [LivePreset, LivePreset, LivePreset] {
       name: 'Calm',
       settings: templatePresets[0].settings,
       mediaEnabled: false,
-      musicInstruments: { pling: false, mid1: false, mid2: false, pad: false },
+      musicInstruments: { pling: true, mid1: false, mid2: false, pad: true },
     },
     {
       name: 'Breathing',
@@ -101,7 +101,25 @@ export function loadAppState(): AppState {
     const stored = localStorage.getItem(STATE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      return { ...structuredClone(defaultAppState), ...parsed };
+      const base = structuredClone(defaultAppState);
+      const merged = { ...base, ...parsed };
+      // Deep-merge livePresets so musicInstruments defaults are preserved
+      if (parsed.livePresets) {
+        merged.livePresets = base.livePresets.map((def: LivePreset, i: number) => {
+          const saved = parsed.livePresets[i];
+          if (!saved) return def;
+          return {
+            ...def,
+            ...saved,
+            musicInstruments: { ...def.musicInstruments, ...(saved.musicInstruments || {}) },
+          };
+        }) as [LivePreset, LivePreset, LivePreset];
+      }
+      // Deep-merge music config
+      if (parsed.music) {
+        merged.music = { ...base.music, ...parsed.music };
+      }
+      return merged;
     }
   } catch { /* fall through */ }
   return migrateOldState();

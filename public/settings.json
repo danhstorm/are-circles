@@ -1,5 +1,5 @@
 {
-  "version": "1",
+  "version": "2",
   "activePreset": 0,
   "livePresets": [
     {
@@ -25,7 +25,7 @@
         "depthOfField": 0.7
       },
       "mediaEnabled": false,
-      "musicInstruments": { "pling": false, "mid1": false, "mid2": false, "pad": false }
+      "musicInstruments": { "pling": true, "mid1": false, "mid2": false, "pad": true }
     },
     {
       "name": "Breathing",
