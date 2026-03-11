@@ -33,7 +33,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-const SPEED_OPTIONS: SpeedSubdivision[] = ['1/1', '1/2', '1/4', '1/8', '1/16'];
+const SPEED_OPTIONS: SpeedSubdivision[] = ['1/1', '1/2', '1/3', '1/4', '1/6', '1/8', '1/16'];
 const SOUND_OPTIONS: { value: MidSound; label: string }[] = [
   { value: 'xylophone', label: 'Xylophone' },
   { value: 'rhodes', label: 'Rhodes' },
@@ -118,6 +118,17 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
             <Slider label="Trigger %" value={m.pling.triggerProbability} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'triggerProbability', v)} />
             <Slider label="LFO Speed" value={m.pling.lfoSpeed} min={0.1} max={10} step={0.1} onChange={v => setInst('pling', 'lfoSpeed', v)} />
             <Slider label="LFO Depth" value={m.pling.lfoDepth} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'lfoDepth', v)} />
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Slider label="Octave Low" value={m.pling.octaveLow} min={2} max={7} step={1} onChange={v => setInst('pling', 'octaveLow', Math.min(v, m.pling.octaveHigh))} />
+              </div>
+              <div className="flex-1">
+                <Slider label="Octave High" value={m.pling.octaveHigh} min={2} max={7} step={1} onChange={v => setInst('pling', 'octaveHigh', Math.max(v, m.pling.octaveLow))} />
+              </div>
+            </div>
+            <Slider label="Filter Cutoff" value={m.pling.filterCutoff} min={200} max={8000} step={50} onChange={v => setInst('pling', 'filterCutoff', v)} />
+            <Slider label="Filter Q" value={m.pling.filterQ} min={0.5} max={15} step={0.5} onChange={v => setInst('pling', 'filterQ', v)} />
+            <Slider label="Decay" value={m.pling.decay} min={0.02} max={1} step={0.02} onChange={v => setInst('pling', 'decay', v)} />
             <Slider label="Delay" value={m.pling.delay} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'delay', v)} />
             <Slider label="Reverb" value={m.pling.reverb} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'reverb', v)} />
           </Section>

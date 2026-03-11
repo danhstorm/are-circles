@@ -90,7 +90,7 @@
     "scale": "pentatonic-major",
     "tempo": 60,
     "masterVolume": 0.6,
-    "pling": { "volume": 0.3, "speed": "1/8", "triggerProbability": 0.4, "delay": 0.3, "reverb": 0.5, "lfoSpeed": 2, "lfoDepth": 0.4 },
+    "pling": { "volume": 0.3, "speed": "1/8", "triggerProbability": 0.4, "delay": 0.3, "reverb": 0.5, "lfoSpeed": 2, "lfoDepth": 0.4, "octaveLow": 4, "octaveHigh": 6, "filterCutoff": 2000, "filterQ": 2, "decay": 0.15 },
     "mid1": { "volume": 0.5, "sound": "rhodes", "speed": "1/4", "triggerProbability": 0.3, "delay": 0.2, "reverb": 0.4 },
     "mid2": { "volume": 0.4, "sound": "kalimba", "speed": "1/4", "triggerProbability": 0.2, "delay": 0.3, "reverb": 0.5 },
     "pad": { "volume": 0.25, "chordInterval": 4, "reverb": 0.6 },

@@ -28,7 +28,9 @@ function subdivisionToBeats(sub: SpeedSubdivision): number {
   switch (sub) {
     case '1/1': return 4;
     case '1/2': return 2;
+    case '1/3': return 4 / 3;
     case '1/4': return 1;
+    case '1/6': return 2 / 3;
     case '1/8': return 0.5;
     case '1/16': return 0.25;
   }
@@ -79,7 +81,7 @@ export const defaultMusicConfig: MusicConfig = {
   scale: 'pentatonic-major',
   tempo: 60,
   masterVolume: 0.6,
-  pling: { volume: 0.3, speed: '1/8', triggerProbability: 0.4, delay: 0.3, reverb: 0.5, lfoSpeed: 2, lfoDepth: 0.4 },
+  pling: { volume: 0.3, speed: '1/8', triggerProbability: 0.4, delay: 0.3, reverb: 0.5, lfoSpeed: 2, lfoDepth: 0.4, octaveLow: 4, octaveHigh: 6, filterCutoff: 2000, filterQ: 2, decay: 0.15 },
   mid1: { volume: 0.5, sound: 'rhodes', speed: '1/4', triggerProbability: 0.3, delay: 0.2, reverb: 0.4 },
   mid2: { volume: 0.4, sound: 'kalimba', speed: '1/4', triggerProbability: 0.2, delay: 0.3, reverb: 0.5 },
   pad: { volume: 0.25, chordInterval: 4, reverb: 0.6 },
@@ -152,9 +154,18 @@ export class MusicEngine {
   }
 
   updateConfig(c: MusicConfig) {
+    const old = this.config;
     this.config = { ...c };
     if (this.delayNode && this.ctx) {
       this.delayNode.delayTime.setTargetAtTime(60 / c.tempo, this.ctx.currentTime, 0.1);
+    }
+    // Reset scheduler times so new speeds/probabilities take effect immediately
+    if (this.ctx && this._playing) {
+      const now = this.ctx.currentTime;
+      if (c.pling.speed !== old.pling.speed || c.tempo !== old.tempo) this.nextTime.pling = now;
+      if (c.mid1.speed !== old.mid1.speed || c.tempo !== old.tempo) this.nextTime.mid1 = now;
+      if (c.mid2.speed !== old.mid2.speed || c.tempo !== old.tempo) this.nextTime.mid2 = now;
+      if (c.pad.chordInterval !== old.pad.chordInterval || c.tempo !== old.tempo) this.padNextChordTime = now;
     }
   }
 
@@ -297,7 +308,9 @@ export class MusicEngine {
     const ctx = this.ctx!;
     const c = this.config.pling;
     const scale = SCALES[this.config.scale];
-    const midi = pickNote(scale, 60, 84);
+    const midiLow = c.octaveLow * 12 + 12; // octave 4 = midi 60
+    const midiHigh = c.octaveHigh * 12 + 12;
+    const midi = pickNote(scale, midiLow, midiHigh);
     const freq = midiToFreq(midi);
 
     const osc = ctx.createOscillator();
@@ -306,24 +319,27 @@ export class MusicEngine {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 2000;
-    filter.Q.value = 2;
+    filter.frequency.value = c.filterCutoff;
+    filter.Q.value = c.filterQ;
 
     // LFO on filter cutoff
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = c.lfoSpeed;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = c.lfoDepth * 1500;
+    lfoGain.gain.value = c.lfoDepth * c.filterCutoff * 0.75;
     lfo.connect(lfoGain);
     lfoGain.connect(filter.frequency);
     lfo.start(time);
 
+    const decay = Math.max(0.02, c.decay);
+    const noteDur = decay * 4 + 0.2;
+    const vol = c.volume * c.volume;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(c.volume, time + 0.01);
-    env.gain.setTargetAtTime(c.volume * 0.1, time + 0.01, 0.15);
-    env.gain.setTargetAtTime(0, time + 0.4, 0.1);
+    env.gain.linearRampToValueAtTime(vol, time + 0.01);
+    env.gain.setTargetAtTime(vol * 0.1, time + 0.01, decay);
+    env.gain.setTargetAtTime(0, time + decay * 3, decay * 0.7);
 
     osc.connect(filter);
     filter.connect(env);
@@ -351,13 +367,13 @@ export class MusicEngine {
     }
 
     osc.start(time);
-    const stopTime = time + 0.8;
+    const stopTime = time + noteDur + 0.5;
     osc.stop(stopTime);
     lfo.stop(stopTime);
 
     // Swirl (pling: 30% strength)
-    this.addSwirl(0.3, midi, 60, 84);
-    this.addSizePulse(midi, 60, 84, 0.3);
+    this.addSwirl(0.3, midi, midiLow, midiHigh);
+    this.addSizePulse(midi, midiLow, midiHigh, 0.3);
   }
 
   // ─── Mid (FM synthesis) ───
@@ -462,11 +478,16 @@ export class MusicEngine {
     // Fade out old chord
     this.fadePadOut(4);
 
+    // Exponential volume curve: slider 0-1 maps to perceptually even loudness
+    // Divide by estimated osc count (3 notes * 3 detuned = 9) to tame stacking
+    const oscCount = chord.length * 3;
+    const expVol = c.volume * c.volume * (0.5 / Math.max(1, oscCount));
+
     const oscs: OscillatorNode[] = [];
     const gains: GainNode[] = [];
     const masterPadGain = ctx.createGain();
     masterPadGain.gain.setValueAtTime(0, time);
-    masterPadGain.gain.linearRampToValueAtTime(c.volume, time + 3);
+    masterPadGain.gain.linearRampToValueAtTime(expVol, time + 3);
     masterPadGain.connect(this.masterGain!);
 
     if (c.reverb > 0.01 && this.reverbConv) {

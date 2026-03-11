@@ -100,7 +100,7 @@ export interface MediaItem {
 
 export type ScaleType = 'pentatonic-major' | 'pentatonic-minor';
 export type MidSound = 'xylophone' | 'rhodes' | 'breathy' | 'bell' | 'kalimba' | 'glass';
-export type SpeedSubdivision = '1/1' | '1/2' | '1/4' | '1/8' | '1/16';
+export type SpeedSubdivision = '1/1' | '1/2' | '1/3' | '1/4' | '1/6' | '1/8' | '1/16';
 
 export interface PlingConfig {
   volume: number;
@@ -110,6 +110,11 @@ export interface PlingConfig {
   reverb: number;
   lfoSpeed: number;
   lfoDepth: number;
+  octaveLow: number;
+  octaveHigh: number;
+  filterCutoff: number;
+  filterQ: number;
+  decay: number;
 }
 
 export interface MidConfig {
