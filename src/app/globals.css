@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: dark;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -24,6 +28,10 @@ input[type="range"] {
   outline: none;
 }
 
+input[type="text"] {
+  color-scheme: dark;
+}
+
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 16px;
@@ -44,6 +52,253 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 1px 4px rgba(0,0,0,0.3);
 }
 
+.retro-shell,
+.companion-shell,
+.retro-module,
+.companion-section,
+.retro-screen,
+.retro-label-strip,
+.media-thumb-frame,
+.retro-pill,
+.retro-icon-button {
+  position: relative;
+  isolation: isolate;
+}
+
+.retro-shell {
+  background: linear-gradient(180deg, #d7dbd7 0%, #cdd2ce 100%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -2px 0 rgba(0, 0, 0, 0.08);
+}
+
+.retro-shell::before,
+.companion-shell::before,
+.retro-module::before,
+.companion-section::before,
+.retro-screen::before,
+.media-thumb-frame::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.retro-shell::before {
+  background:
+    repeating-linear-gradient(90deg, rgba(16, 26, 34, 0.045) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 8px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 18%);
+  opacity: 0.55;
+}
+
+.retro-shell::after,
+.companion-shell::after {
+  content: '';
+  position: absolute;
+  inset: 9px;
+  border-radius: inherit;
+  border: 1px solid rgba(35, 41, 47, 0.1);
+  pointer-events: none;
+}
+
+.companion-shell {
+  background: linear-gradient(180deg, rgba(18, 18, 20, 0.94), rgba(8, 8, 10, 0.98));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.companion-shell::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 14%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.014) 0 1px, transparent 1px 6px);
+}
+
+.retro-module {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--module-bg) 90%, white 72%), color-mix(in srgb, var(--module-bg) 94%, #dbe1db 68%));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(0, 0, 0, 0.08), 0 6px 14px rgba(0, 0, 0, 0.1);
+}
+
+.retro-module::before {
+  background:
+    repeating-linear-gradient(90deg, rgba(12, 24, 32, 0.035) 0 1px, transparent 1px 6px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2), transparent 12%);
+  opacity: 0.45;
+}
+
+.companion-section {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+.companion-section::before {
+  background: linear-gradient(140deg, rgba(255, 255, 255, 0.05), transparent 18%, transparent 76%, rgba(255, 255, 255, 0.025));
+}
+
+.retro-screen {
+  background:
+    linear-gradient(180deg, rgba(58, 64, 71, 0.96), rgba(44, 49, 55, 0.98)),
+    repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 4px);
+  border: 1px solid rgba(27, 31, 36, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.retro-screen::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 20%);
+}
+
+.retro-label-strip {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 92%, white 12%), color-mix(in srgb, var(--accent-deep) 78%, white 8%));
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.12);
+}
+
+.retro-label-strip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.14) 0 1px, transparent 1px 7px);
+  pointer-events: none;
+}
+
+.retro-pill {
+  background: linear-gradient(180deg, rgba(248, 248, 245, 0.92), rgba(227, 231, 226, 0.96));
+  border: 1px solid rgba(55, 64, 72, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.retro-pill[data-active='true'] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white 18%), color-mix(in srgb, var(--accent-deep) 78%, white 10%));
+  color: #050505;
+  border-color: color-mix(in srgb, var(--accent-deep) 40%, black 10%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 2px 6px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.retro-icon-button {
+  background: linear-gradient(180deg, rgba(58, 64, 71, 0.96), rgba(44, 49, 55, 0.98));
+  border: 1px solid rgba(18, 20, 24, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+.retro-icon-button:hover,
+.retro-pill:hover {
+  filter: brightness(1.04);
+}
+
+.retro-screw {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #f5f7f4, #c1c8c1 48%, #838a86 72%, #4d5450 100%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.retro-screw::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 1px;
+  background: rgba(70, 78, 82, 0.7);
+  transform: translate(-50%, -50%) rotate(12deg);
+  border-radius: 999px;
+}
+
+.retro-led {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.retro-meter {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+}
+
+.retro-meter span {
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 90%, white 18%), color-mix(in srgb, var(--accent-deep) 84%, black 14%));
+  opacity: 0.5;
+}
+
+.retro-meter span:nth-child(1) { height: 8px; opacity: 0.42; }
+.retro-meter span:nth-child(2) { height: 11px; opacity: 0.58; }
+.retro-meter span:nth-child(3) { height: 14px; opacity: 0.78; }
+.retro-meter span:nth-child(4) { height: 10px; opacity: 0.54; }
+
+.media-thumb-frame {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+
+.media-thumb-frame::before {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), transparent 24%, transparent 78%, rgba(255, 255, 255, 0.04)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 14%);
+}
+
+.panel-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0.06));
+  border-radius: 999px;
+  outline: none;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.06), inset 0 -1px 2px rgba(0,0,0,0.35);
+}
+
+.panel-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.72);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+.panel-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.72);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+}
+
+/* Synth panel sliders - scale-aware via CSS custom property */
+.synth-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 999px !important;
+  outline: none;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.08), inset 0 -1px 2px rgba(0,0,0,0.2);
+}
+
+.synth-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--thumb-size, 10px);
+  height: var(--thumb-size, 10px);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7fb0ef, #4f76ab);
+  border: 1px solid rgba(38, 60, 88, 0.5);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+}
+
+.synth-slider::-moz-range-thumb {
+  width: var(--thumb-size, 10px);
+  height: var(--thumb-size, 10px);
+  border-radius: 50%;
+  background: linear-gradient(180deg, #7fb0ef, #4f76ab);
+  border: 1px solid rgba(38, 60, 88, 0.5);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.18);
+}
+
 input[type="color"] {
   -webkit-appearance: none;
   border: 1px solid rgba(255,255,255,0.2);
@@ -57,4 +312,14 @@ input[type="color"]::-webkit-color-swatch-wrapper {
 input[type="color"]::-webkit-color-swatch {
   border: none;
   border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }

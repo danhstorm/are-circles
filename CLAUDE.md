@@ -62,7 +62,7 @@ docs/
 - `activePreset: number` (0-2)
 - `livePresets: [LivePreset, LivePreset, LivePreset]`
 - `globalColors: { backgroundColor, paletteColors, hueVariation }`
-- `mediaOverrides: Record<string, MediaOverride>` -- per-video intensity/invert/playMode
+- `mediaOverrides: Record<string, MediaOverride>` -- per-video intensity/contrast/invert/playMode
 - `mediaGridColumns: number`
 - `transitionSpeed: number`
 - `music: MusicConfig`
@@ -75,11 +75,11 @@ docs/
 
 **MusicConfig** (global):
 - `scale: 'pentatonic-major' | 'pentatonic-minor'`
-- `tempo: number` (40-80 BPM)
+- `tempo: number` (40-80 BPM, default 54)
 - `masterVolume: number`
-- `pling: PlingConfig` (volume, speed subdivision, trigger %, delay, reverb, LFO speed, LFO depth)
-- `mid1, mid2: MidConfig` (volume, sound preset, speed, trigger %, delay, reverb)
-- `pad: PadConfig` (volume, chord interval, reverb)
+- `pling: PlingConfig` (volumeMin/Max, speed, triggerProbability, delay, reverb, LFO speed/depth, octave range, filter/Q, decay, + 6 automation ranges: autoFilter, autoDecay, autoLfoSpeed, autoLfoDepth, autoTrigger, autoSpeed)
+- `mid1, mid2: MidConfig` (volumeMin/Max, sound preset, speed, trigger %, octave range, filter, decay, FM amount, detune, delay, reverb)
+- `pad: PadConfig` (volume, chord interval, reverb, filterCutoff, detune, octaveLow/High)
 - `visualReactions: VisualReactionConfig` (swirl strength, swirl radius, size pulse, bass boost)
 
 **Settings** (renderer input, built from LivePreset + globals):
@@ -146,13 +146,13 @@ docs/
 ```
 
 **4 Instruments:**
-1. **Pling**: Triangle oscillator + LFO on filter cutoff. Range C4-C6. Short pluck envelope. 30% swirl strength.
-2. **Mid 1**: FM synthesis (carrier + modulator). 6 sound presets with different modRatio/modIndex/ADSR:
+1. **Pling**: Triangle oscillator + LFO on filter cutoff. Range C4-C7 (configurable). Short pluck envelope. 30% swirl strength. Fully automated: filter, decay, LFO speed/depth, trigger % all ping-pong independently.
+2. **Mid 1 ("Plong")**: FM synthesis with 3 detuned carriers, decaying mod index, output lowpass filter. 6 sound presets:
    - xylophone (bright, percussive), rhodes (warm, sustained), breathy (noise layer, slow attack),
    - bell (metallic, long decay), kalimba (clean, short), glass (soft, airy)
-   - Range C3-C5. Full swirl strength (primary visual reactor).
-3. **Mid 2**: Same as Mid 1, independent sound selection. Allows layering two different FM sounds.
-4. **Pad**: 3 detuned sine oscillators per chord note (+-5 cents). Lowpass filtered at 800Hz. Sustained drone with 3s crossfade between chords. Range C2-C4.
+   - Range C3-C5. Full swirl strength. Triggers 1-3 random dot growth pulses per note.
+3. **Mid 2 ("Bong")**: Same as Mid 1, independent sound selection. Range C2-C4. Allows layering two different FM sounds.
+4. **Pad**: 3 detuned sine oscillators per chord note (configurable detune). Lowpass filtered (configurable cutoff). Sustained drone with 3s crossfade. Configurable octave range.
 
 **Shared FX:**
 - ConvolverNode reverb with generated impulse response (2.5s, decay 2.5)
@@ -170,13 +170,13 @@ docs/
 
 #### Media Engine (`media.ts`, ~260 lines)
 
-**Brightness sampling:** Renders video frame to 64x64 OffscreenCanvas at 15fps, extracts luminance per pixel. `getBrightness(nx, ny)` returns `luminance * fadeProgress * perVideoIntensity`.
+**Brightness sampling:** Renders video frame to 64x64 OffscreenCanvas at 15fps, extracts luminance per pixel. `getBrightness(nx, ny)` applies contrast/levels (black point cutoff) then returns `adjusted_luminance * fadeProgress * perVideoIntensity`. Per-video contrast stored in `contrastMap`.
 
 **Fade state machine:** idle → (timer) → in → hold → out → idle. Configurable interval/fade/hold durations.
 
 **Pingpong playback:** First pass forward (native). On `ended`: set `playbackRate = -1` for native reverse. Fallback: manual `currentTime` seeking if browser doesn't support negative playbackRate.
 
-**Per-video intensity:** `intensityMap: Map<string, number>` set from AppState.mediaOverrides. Multiplied into brightness output.
+**Per-video intensity + contrast:** `intensityMap` and `contrastMap` (both `Map<string, number>`) set from AppState.mediaOverrides. Intensity multiplied into brightness output. Contrast applied as black point cutoff before intensity.
 
 #### Audio Engine (`audio.ts`, ~80 lines)
 
@@ -193,18 +193,18 @@ Mic input via `getUserMedia`. FFT analysis split into bass/mid/high bands. Smoot
   - **Circles & Depth**: Count, speed, size range, opacity range, depth of field, blur %, blur range
   - **Drift & Layout**: Drift strength/speed, Grid mode toggle + blend/columns
   - **Focus Area**: Shape (none/circle/oval/drop) + strength
-  - **Media**: Enable toggle, interval range, fade, grid columns, video thumbnails with per-video intensity sliders, loop/pingpong/invert controls, delete with confirm
+  - **Media**: Enable toggle, interval range, fade, grid columns, video thumbnails with per-video "Int" (intensity) + "Lvl" (contrast/levels) sliders, loop/pingpong/invert controls, delete with confirm. Thumbnails preview intensity+contrast via CSS filter.
   - **Audio** (collapsible): Mic enable, gain, sensitivity, smoothing, burst decay
   - **Colors** (collapsible, global): BG color, 5 palette swatches, hue variation
 
 #### MusicPanel (`MusicPanel.tsx`)
-- Header: "Music"
-- **Global**: Scale toggle (pentatonic major/minor), tempo (40-80), master volume
-- **Pling**: Enable (per-preset), volume, speed subdivision buttons, trigger %, LFO speed/depth, delay, reverb
-- **Mid 1**: Enable (per-preset), sound preset buttons (6 options), volume, speed, trigger %, delay, reverb
-- **Mid 2**: Same as Mid 1
-- **Pad**: Enable (per-preset), volume, chord interval (bars), reverb
-- **Visual Reactions**: Swirl strength, swirl radius, size pulse, bass boost
+- Retro synth aesthetic: color-coded modules with LED enable dots, monospace fonts, compact 280px, `.synth-slider` CSS
+- **Global**: Scale toggle (MAJ/MIN), tempo (40-80), master volume
+- **Pling** (teal): Enable, volume range, speed buttons, octave range, filter Q, delay, reverb. Auto sub-section: auto speed, filter/decay/LFO speed/LFO depth/trigger range sliders (when min===max = fixed value)
+- **Plong** (amber, = mid1): Enable, sound buttons (6), volume range, speed, trigger %, octave range, filter, decay, FM, detune, delay, reverb
+- **Bong** (pink, = mid2): Same as Plong
+- **Pad** (green): Enable, volume, bars, octave range, filter, detune, reverb
+- **Reactions** (purple): Swirl, radius, pulse, bass
 
 ### Keyboard Shortcuts
 

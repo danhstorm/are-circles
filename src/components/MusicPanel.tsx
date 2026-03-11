@@ -1,6 +1,8 @@
 'use client';
 
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { AppState, ScaleType, MidSound, SpeedSubdivision, MusicConfig } from '@/types';
+import { synthSkins } from './retroDesignSystem';
 
 interface Props {
   visible: boolean;
@@ -9,206 +11,528 @@ interface Props {
   onUpdate: (updater: (prev: AppState) => AppState) => void;
 }
 
-function Slider({ label, value, min, max, step, onChange }: {
-  label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void;
+const PANEL_WIDTH_KEY = 'synth-panel-width';
+const DEFAULT_WIDTH = 320;
+const MIN_WIDTH = 250;
+const MAX_WIDTH = 480;
+
+const SECTION_ACCENTS = {
+  global: 'rgba(255,255,255,0.55)',
+  pling: synthSkins.pling.primary,
+  plong: synthSkins.plong.primary,
+  bong: synthSkins.bong.primary,
+  pad: synthSkins.pad.primary,
+  vr: synthSkins.vr.primary,
+} as const;
+
+function loadPanelWidth(): number {
+  if (typeof window === 'undefined') return DEFAULT_WIDTH;
+  const saved = window.localStorage.getItem(PANEL_WIDTH_KEY);
+  if (saved) {
+    const parsed = parseInt(saved, 10);
+    if (parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) return parsed;
+  }
+  return DEFAULT_WIDTH;
+}
+
+function Slider({ label, value, min, max, step, onChange, color }: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+  color: string;
+}) {
+  const pct = ((value - min) / (max - min)) * 100;
+
+  return (
+    <div className="flex flex-col gap-1 py-1">
+      <div className="flex justify-between items-baseline text-[11px] gap-2">
+        <span className="text-white/55 shrink-0">{label}</span>
+        <span className="text-white/35 tabular-nums text-[10px] min-w-[4.4em] text-right">
+          {value.toFixed(step < 1 ? 2 : 0)}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full h-1 cursor-pointer"
+        style={{
+          background: `linear-gradient(to right, ${color}80 0%, ${color}80 ${pct}%, rgba(255,255,255,0.1) ${pct}%, rgba(255,255,255,0.1) 100%)`,
+          borderRadius: 999,
+        }}
+      />
+    </div>
+  );
+}
+
+function RangeSlider({ label, low, high, min, max, step, onChange, color }: {
+  label: string;
+  low: number;
+  high: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (low: number, high: number) => void;
+  color: string;
+}) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const THUMB = 12;
+  const HALF = THUMB / 2;
+  const frac = (v: number) => (v - min) / (max - min);
+  const snap = (v: number) => {
+    const rounded = Math.round(v / step) * step;
+    return Math.max(min, Math.min(max, parseFloat(rounded.toFixed(8))));
+  };
+  const decimals = step < 1 ? 2 : 0;
+
+  const startDrag = (thumb: 'low' | 'high') => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const track = trackRef.current;
+    if (!track) return;
+
+    const rect = track.getBoundingClientRect();
+    const usable = rect.width - THUMB;
+    const move = (ev: PointerEvent) => {
+      const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left - HALF) / usable));
+      const nextValue = snap(min + ratio * (max - min));
+      if (thumb === 'low') onChange(Math.min(nextValue, high), high);
+      else onChange(low, Math.max(nextValue, low));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const lowPct = HALF + frac(low) * (100 - THUMB);
+  const highPct = HALF + frac(high) * (100 - THUMB);
+
+  return (
+    <div className="flex flex-col gap-1 py-1">
+      <div className="flex justify-between items-baseline text-[11px] gap-2">
+        <span className="text-white/55 shrink-0">{label}</span>
+        <span className="text-white/35 tabular-nums text-[10px] min-w-[5.2em] text-right">
+          {low.toFixed(decimals)} – {high.toFixed(decimals)}
+        </span>
+      </div>
+      <div ref={trackRef} className="relative h-4 flex items-center" style={{ padding: `0 ${HALF}px` }}>
+        <div className="absolute h-1 rounded-full bg-white/10" style={{ left: HALF, right: HALF }} />
+        <div className="absolute h-1 rounded-full" style={{ left: `${lowPct}%`, right: `${100 - highPct}%`, background: color }} />
+        <div
+          className="absolute w-3 h-3 rounded-full bg-white/70 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{ left: `${lowPct}%` }}
+          onPointerDown={startDrag('low')}
+        />
+        <div
+          className="absolute w-3 h-3 rounded-full bg-white/70 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{ left: `${highPct}%` }}
+          onPointerDown={startDrag('high')}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ChoiceButtons<T extends string | number>({ value, onChange, options, accent }: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { label: string; value: T }[];
+  accent: string;
 }) {
   return (
-    <div className="flex flex-col gap-1 py-0.5">
-      <div className="flex justify-between text-[11px]">
-        <span className="text-white/60">{label}</span>
-        <span className="text-white/40 tabular-nums">{value.toFixed(step < 1 ? 2 : 0)}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full h-1 cursor-pointer" />
+    <div className="flex flex-wrap gap-1.5 py-1">
+      {options.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={String(option.value)}
+            onClick={() => onChange(option.value)}
+            className="rounded-md text-[10px] uppercase tracking-wide font-medium transition-colors cursor-pointer"
+            style={{
+              padding: '6px 8px',
+              background: active ? accent : 'rgba(255,255,255,0.06)',
+              color: active ? '#050505' : 'rgba(255,255,255,0.72)',
+              border: active ? `1px solid ${accent}` : '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {option.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function ToggleChip({ enabled, onToggle, accent }: {
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  accent: string;
+}) {
   return (
-    <div className="flex flex-col gap-1 rounded-lg" style={{ padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)' }}>
-      <span className="text-[10px] uppercase tracking-widest font-medium text-white/35">{title}</span>
-      {children}
+    <button
+      onClick={() => onToggle(!enabled)}
+      className="rounded-full text-[10px] uppercase tracking-widest font-medium cursor-pointer transition-colors"
+      style={{
+        padding: '5px 9px',
+        background: enabled ? accent : 'rgba(255,255,255,0.06)',
+        color: enabled ? '#050505' : 'rgba(255,255,255,0.58)',
+        border: enabled ? `1px solid ${accent}` : '1px solid rgba(255,255,255,0.08)',
+      }}
+      aria-pressed={enabled}
+    >
+      {enabled ? 'On' : 'Off'}
+    </button>
+  );
+}
+
+function Card({ title, accent, children, collapsed, onToggle, action }: {
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+  collapsed?: boolean;
+  onToggle?: () => void;
+  action?: React.ReactNode;
+}) {
+  const collapsible = onToggle !== undefined;
+
+  return (
+    <div
+      className="flex flex-col gap-2"
+      style={{
+        padding: 12,
+        background: 'rgba(255,255,255,0.025)',
+        borderRadius: 10,
+        border: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        {collapsible ? (
+          <button onClick={onToggle} className="flex-1 flex items-center gap-2 text-left cursor-pointer min-w-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent }} />
+            <span className="text-[10px] uppercase tracking-widest font-medium text-white/30 truncate">{title}</span>
+            <span className="ml-auto text-white/20 text-[10px]">{collapsed ? '▸' : '▾'}</span>
+          </button>
+        ) : (
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accent }} />
+            <span className="text-[10px] uppercase tracking-widest font-medium text-white/30 truncate">{title}</span>
+          </div>
+        )}
+        {action}
+      </div>
+      {(!collapsible || !collapsed) && <div className="flex flex-col gap-1.5">{children}</div>}
     </div>
   );
 }
 
-const SPEED_OPTIONS: SpeedSubdivision[] = ['1/1', '1/2', '1/3', '1/4', '1/6', '1/8', '1/16'];
-const SOUND_OPTIONS: { value: MidSound; label: string }[] = [
-  { value: 'xylophone', label: 'Xylophone' },
-  { value: 'rhodes', label: 'Rhodes' },
-  { value: 'breathy', label: 'Breathy' },
-  { value: 'bell', label: 'Bell' },
-  { value: 'kalimba', label: 'Kalimba' },
-  { value: 'glass', label: 'Glass' },
-];
+function AutoSection({ accent, children }: { accent: string; children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(true);
+
+  return (
+    <div
+      className="flex flex-col gap-1.5 mt-1"
+      style={{
+        padding: 10,
+        borderRadius: 9,
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.05)',
+      }}
+    >
+      <button onClick={() => setCollapsed((value) => !value)} className="flex items-center gap-2 cursor-pointer text-left">
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: accent }} />
+        <span className="text-[10px] uppercase tracking-widest font-medium text-white/30">Automation</span>
+        <span className="ml-auto text-white/20 text-[10px]">{collapsed ? '▸' : '▾'}</span>
+      </button>
+      {!collapsed && <div className="flex flex-col gap-1.5">{children}</div>}
+    </div>
+  );
+}
+
+function GripDots() {
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 opacity-40 cursor-col-resize">
+      {[0, 1, 2, 3, 4].map((index) => (
+        <span key={index} className="block h-1 w-1 rounded-full bg-white/40" />
+      ))}
+    </div>
+  );
+}
+
+function SpeedButtons({ value, onChange, accent }: {
+  value: SpeedSubdivision;
+  onChange: (value: SpeedSubdivision) => void;
+  accent: string;
+}) {
+  return (
+    <ChoiceButtons
+      value={value}
+      onChange={onChange}
+      accent={accent}
+      options={[
+        { label: '1/1', value: '1/1' },
+        { label: '1/2', value: '1/2' },
+        { label: '1/3', value: '1/3' },
+        { label: '1/4', value: '1/4' },
+        { label: '1/6', value: '1/6' },
+        { label: '1/8', value: '1/8' },
+        { label: '1/16', value: '1/16' },
+      ]}
+    />
+  );
+}
+
+function SoundButtons({ value, onChange, accent }: {
+  value: MidSound;
+  onChange: (value: MidSound) => void;
+  accent: string;
+}) {
+  return (
+    <ChoiceButtons
+      value={value}
+      onChange={onChange}
+      accent={accent}
+      options={[
+        { label: 'Xylophone', value: 'xylophone' },
+        { label: 'Rhodes', value: 'rhodes' },
+        { label: 'Breathy', value: 'breathy' },
+        { label: 'Bell', value: 'bell' },
+        { label: 'Kalimba', value: 'kalimba' },
+        { label: 'Glass', value: 'glass' },
+      ]}
+    />
+  );
+}
 
 export default function MusicPanel({ visible, appState, editingPreset, onUpdate }: Props) {
-  const m = appState.music;
-  const preset = appState.livePresets[editingPreset];
+  const music = appState.music;
+  const preset = appState.scenes[editingPreset];
+
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const resizing = useRef(false);
+
+  const [plingOpen, setPlingOpen] = useState(true);
+  const [plongOpen, setPlongOpen] = useState(false);
+  const [bongOpen, setBongOpen] = useState(false);
+  const [padOpen, setPadOpen] = useState(false);
+  const [vrOpen, setVrOpen] = useState(false);
+
+  useEffect(() => {
+    const savedWidth = loadPanelWidth();
+    if (savedWidth === DEFAULT_WIDTH) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      setPanelWidth(savedWidth);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const startResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    resizing.current = true;
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+    let nextWidth = panelWidth;
+
+    const move = (ev: PointerEvent) => {
+      if (!resizing.current) return;
+      nextWidth = Math.round(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + (ev.clientX - startX))));
+      setPanelWidth(nextWidth);
+    };
+
+    const up = () => {
+      resizing.current = false;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.localStorage.setItem(PANEL_WIDTH_KEY, String(nextWidth));
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  }, [panelWidth]);
 
   const setMusic = <K extends keyof MusicConfig>(key: K, value: MusicConfig[K]) => {
-    onUpdate(prev => ({ ...prev, music: { ...prev.music, [key]: value } }));
+    onUpdate((prev) => ({ ...prev, music: { ...prev.music, [key]: value } }));
   };
 
   const setInst = (inst: 'pling' | 'mid1' | 'mid2' | 'pad', key: string, value: unknown) => {
-    onUpdate(prev => ({
-      ...prev,
-      music: { ...prev.music, [inst]: { ...prev.music[inst], [key]: value } },
-    }));
+    onUpdate((prev) => ({ ...prev, music: { ...prev.music, [inst]: { ...prev.music[inst], [key]: value } } }));
   };
 
-  const setPresetInst = (inst: 'pling' | 'mid1' | 'mid2' | 'pad', on: boolean) => {
-    onUpdate(prev => {
-      const presets = [...prev.livePresets] as AppState['livePresets'];
-      presets[editingPreset] = {
-        ...presets[editingPreset],
-        musicInstruments: { ...presets[editingPreset].musicInstruments, [inst]: on },
+  const setInstMulti = (inst: 'pling' | 'mid1' | 'mid2' | 'pad', updates: Record<string, unknown>) => {
+    onUpdate((prev) => ({ ...prev, music: { ...prev.music, [inst]: { ...prev.music[inst], ...updates } } }));
+  };
+
+  const setPresetInst = (inst: 'pling' | 'mid1' | 'mid2' | 'pad', enabled: boolean) => {
+    onUpdate((prev) => {
+      const scenes = [...prev.scenes] as AppState['scenes'];
+      scenes[editingPreset] = {
+        ...scenes[editingPreset],
+        musicInstruments: { ...scenes[editingPreset].musicInstruments, [inst]: enabled },
       };
-      return { ...prev, livePresets: presets };
+      return { ...prev, scenes };
     });
   };
 
   const setVR = (key: string, value: number) => {
-    onUpdate(prev => ({
+    onUpdate((prev) => ({
       ...prev,
-      music: { ...prev.music, visualReactions: { ...prev.music.visualReactions, [key]: value } },
+      music: {
+        ...prev.music,
+        visualReactions: { ...prev.music.visualReactions, [key]: value },
+      },
     }));
   };
 
   return (
-    <div className={`fixed z-50 transition-all duration-300
-      top-0 left-0 bottom-0 w-[300px]
-      sm:top-4 sm:left-4 sm:bottom-4 sm:max-w-[calc(100vw-440px)]
-      ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'}`}>
-      <div className="h-full sm:rounded-2xl bg-black/35 backdrop-blur-2xl border-r sm:border border-white/8 overflow-y-scroll">
-        <div className="flex flex-col gap-2.5 p-5">
-
-          <h2 className="text-white/90 text-xs font-medium tracking-[0.2em] uppercase pb-1">Music</h2>
-
-          {/* Global */}
-          <Section title="Global">
-            <div className="flex gap-1.5 py-0.5">
-              {(['pentatonic-major', 'pentatonic-minor'] as ScaleType[]).map(s => (
-                <button key={s} onClick={() => setMusic('scale', s)}
-                  className={`flex-1 px-2 py-1 text-[10px] rounded-md transition-colors cursor-pointer ${
-                    m.scale === s ? 'bg-white/18 text-white border border-white/25' : 'bg-white/6 hover:bg-white/12 text-white/60'
-                  }`}>{s === 'pentatonic-major' ? 'Penta Maj' : 'Penta Min'}</button>
-              ))}
+    <div
+      className={`fixed z-50 transition-all duration-300 ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'}`}
+      style={{ top: 16, left: 16, bottom: 16, width: panelWidth, maxWidth: 'calc(100vw - 460px)' }}
+    >
+      <div
+        data-testid="music-panel-shell"
+        data-panel-style="companion-rack"
+        className="relative h-full overflow-y-auto overflow-x-hidden"
+        style={{
+          borderRadius: 12,
+          background: 'rgba(0,0,0,0.42)',
+          backdropFilter: 'blur(24px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,0.08) transparent',
+        }}
+      >
+        <div className="flex flex-col gap-3 p-4">
+          <div className="flex items-start justify-between gap-3 pb-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="min-w-0">
+              <span className="block text-[10px] uppercase tracking-[0.24em] text-white/28">Music</span>
+              <h2 className="mt-1 text-[18px] font-semibold tracking-[0.22em] text-white/88">SYNTH</h2>
+              <p className="mt-1 text-[11px] text-white/38">Same shell language as setup, with all music controls intact.</p>
             </div>
-            <Slider label="Tempo" value={m.tempo} min={40} max={80} step={1} onChange={v => setMusic('tempo', v)} />
-            <Slider label="Master Vol" value={m.masterVolume} min={0} max={1} step={0.05} onChange={v => setMusic('masterVolume', v)} />
-          </Section>
-
-          {/* Pling */}
-          <Section title="Pling">
-            <label className="flex items-center gap-2 cursor-pointer py-0.5">
-              <input type="checkbox" checked={preset.musicInstruments.pling} onChange={e => setPresetInst('pling', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
-              <span className="text-[11px] text-white/60">Enabled (preset {editingPreset + 1})</span>
-            </label>
-            <Slider label="Volume" value={m.pling.volume} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'volume', v)} />
-            <div className="flex gap-1 flex-wrap py-0.5">
-              {SPEED_OPTIONS.map(s => (
-                <button key={s} onClick={() => setInst('pling', 'speed', s)}
-                  className={`px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer ${
-                    m.pling.speed === s ? 'bg-white/20 text-white' : 'bg-white/6 text-white/50'
-                  }`}>{s}</button>
-              ))}
+            <div className="rounded-lg bg-white/5 px-3 py-2 text-right" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="text-[10px] uppercase tracking-widest text-white/28">Tempo</div>
+              <div className="text-[20px] font-semibold tabular-nums text-white/82">{music.tempo}</div>
             </div>
-            <Slider label="Trigger %" value={m.pling.triggerProbability} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'triggerProbability', v)} />
-            <Slider label="LFO Speed" value={m.pling.lfoSpeed} min={0.1} max={10} step={0.1} onChange={v => setInst('pling', 'lfoSpeed', v)} />
-            <Slider label="LFO Depth" value={m.pling.lfoDepth} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'lfoDepth', v)} />
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <Slider label="Octave Low" value={m.pling.octaveLow} min={2} max={7} step={1} onChange={v => setInst('pling', 'octaveLow', Math.min(v, m.pling.octaveHigh))} />
-              </div>
-              <div className="flex-1">
-                <Slider label="Octave High" value={m.pling.octaveHigh} min={2} max={7} step={1} onChange={v => setInst('pling', 'octaveHigh', Math.max(v, m.pling.octaveLow))} />
-              </div>
-            </div>
-            <Slider label="Filter Cutoff" value={m.pling.filterCutoff} min={200} max={8000} step={50} onChange={v => setInst('pling', 'filterCutoff', v)} />
-            <Slider label="Filter Q" value={m.pling.filterQ} min={0.5} max={15} step={0.5} onChange={v => setInst('pling', 'filterQ', v)} />
-            <Slider label="Decay" value={m.pling.decay} min={0.02} max={1} step={0.02} onChange={v => setInst('pling', 'decay', v)} />
-            <Slider label="Delay" value={m.pling.delay} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'delay', v)} />
-            <Slider label="Reverb" value={m.pling.reverb} min={0} max={1} step={0.05} onChange={v => setInst('pling', 'reverb', v)} />
-          </Section>
+          </div>
 
-          {/* Mid 1 */}
-          <Section title="Mid 1">
-            <label className="flex items-center gap-2 cursor-pointer py-0.5">
-              <input type="checkbox" checked={preset.musicInstruments.mid1} onChange={e => setPresetInst('mid1', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
-              <span className="text-[11px] text-white/60">Enabled (preset {editingPreset + 1})</span>
-            </label>
-            <div className="flex gap-1 flex-wrap py-0.5">
-              {SOUND_OPTIONS.map(s => (
-                <button key={s.value} onClick={() => setInst('mid1', 'sound', s.value)}
-                  className={`px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer ${
-                    m.mid1.sound === s.value ? 'bg-white/20 text-white' : 'bg-white/6 text-white/50'
-                  }`}>{s.label}</button>
-              ))}
-            </div>
-            <Slider label="Volume" value={m.mid1.volume} min={0} max={1} step={0.05} onChange={v => setInst('mid1', 'volume', v)} />
-            <div className="flex gap-1 flex-wrap py-0.5">
-              {SPEED_OPTIONS.map(s => (
-                <button key={s} onClick={() => setInst('mid1', 'speed', s)}
-                  className={`px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer ${
-                    m.mid1.speed === s ? 'bg-white/20 text-white' : 'bg-white/6 text-white/50'
-                  }`}>{s}</button>
-              ))}
-            </div>
-            <Slider label="Trigger %" value={m.mid1.triggerProbability} min={0} max={1} step={0.05} onChange={v => setInst('mid1', 'triggerProbability', v)} />
-            <Slider label="Delay" value={m.mid1.delay} min={0} max={1} step={0.05} onChange={v => setInst('mid1', 'delay', v)} />
-            <Slider label="Reverb" value={m.mid1.reverb} min={0} max={1} step={0.05} onChange={v => setInst('mid1', 'reverb', v)} />
-          </Section>
+          <Card title="Global" accent={SECTION_ACCENTS.global}>
+            <ChoiceButtons
+              value={music.scale}
+              onChange={(value) => setMusic('scale', value as ScaleType)}
+              accent="rgba(255,255,255,0.72)"
+              options={[
+                { label: 'Major', value: 'pentatonic-major' },
+                { label: 'Minor', value: 'pentatonic-minor' },
+              ]}
+            />
+            <Slider label="Tempo" value={music.tempo} min={40} max={80} step={1} onChange={(value) => setMusic('tempo', value)} color={SECTION_ACCENTS.global} />
+            <Slider label="Master Volume" value={music.masterVolume} min={0} max={1} step={0.05} onChange={(value) => setMusic('masterVolume', value)} color={SECTION_ACCENTS.global} />
+          </Card>
 
-          {/* Mid 2 */}
-          <Section title="Mid 2">
-            <label className="flex items-center gap-2 cursor-pointer py-0.5">
-              <input type="checkbox" checked={preset.musicInstruments.mid2} onChange={e => setPresetInst('mid2', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
-              <span className="text-[11px] text-white/60">Enabled (preset {editingPreset + 1})</span>
-            </label>
-            <div className="flex gap-1 flex-wrap py-0.5">
-              {SOUND_OPTIONS.map(s => (
-                <button key={s.value} onClick={() => setInst('mid2', 'sound', s.value)}
-                  className={`px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer ${
-                    m.mid2.sound === s.value ? 'bg-white/20 text-white' : 'bg-white/6 text-white/50'
-                  }`}>{s.label}</button>
-              ))}
-            </div>
-            <Slider label="Volume" value={m.mid2.volume} min={0} max={1} step={0.05} onChange={v => setInst('mid2', 'volume', v)} />
-            <div className="flex gap-1 flex-wrap py-0.5">
-              {SPEED_OPTIONS.map(s => (
-                <button key={s} onClick={() => setInst('mid2', 'speed', s)}
-                  className={`px-1.5 py-0.5 text-[10px] rounded-sm cursor-pointer ${
-                    m.mid2.speed === s ? 'bg-white/20 text-white' : 'bg-white/6 text-white/50'
-                  }`}>{s}</button>
-              ))}
-            </div>
-            <Slider label="Trigger %" value={m.mid2.triggerProbability} min={0} max={1} step={0.05} onChange={v => setInst('mid2', 'triggerProbability', v)} />
-            <Slider label="Delay" value={m.mid2.delay} min={0} max={1} step={0.05} onChange={v => setInst('mid2', 'delay', v)} />
-            <Slider label="Reverb" value={m.mid2.reverb} min={0} max={1} step={0.05} onChange={v => setInst('mid2', 'reverb', v)} />
-          </Section>
+          <Card
+            title="Pling"
+            accent={SECTION_ACCENTS.pling}
+            collapsed={!plingOpen}
+            onToggle={() => setPlingOpen((value) => !value)}
+            action={<ToggleChip enabled={preset.musicInstruments.pling} onToggle={(value) => setPresetInst('pling', value)} accent={SECTION_ACCENTS.pling} />}
+          >
+            <RangeSlider label="Volume" low={music.pling.volumeMin} high={music.pling.volumeMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('pling', { volumeMin: low, volumeMax: high })} color={SECTION_ACCENTS.pling} />
+            <SpeedButtons value={music.pling.speed} onChange={(value) => setInst('pling', 'speed', value)} accent={SECTION_ACCENTS.pling} />
+            <RangeSlider label="Octave" low={music.pling.octaveLow} high={music.pling.octaveHigh} min={2} max={7} step={1} onChange={(low, high) => setInstMulti('pling', { octaveLow: low, octaveHigh: high })} color={SECTION_ACCENTS.pling} />
+            <Slider label="Filter Q" value={music.pling.filterQ} min={0.5} max={15} step={0.5} onChange={(value) => setInst('pling', 'filterQ', value)} color={SECTION_ACCENTS.pling} />
+            <Slider label="Delay" value={music.pling.delay} min={0} max={1} step={0.05} onChange={(value) => setInst('pling', 'delay', value)} color={SECTION_ACCENTS.pling} />
+            <Slider label="Reverb" value={music.pling.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('pling', 'reverb', value)} color={SECTION_ACCENTS.pling} />
+            <AutoSection accent={SECTION_ACCENTS.pling}>
+              <Slider label="Auto Speed" value={music.pling.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('pling', 'autoSpeed', value)} color={SECTION_ACCENTS.pling} />
+              <RangeSlider label="Filter" low={music.pling.autoFilterMin} high={music.pling.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('pling', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.pling} />
+              <RangeSlider label="Decay" low={music.pling.autoDecayMin} high={music.pling.autoDecayMax} min={0.02} max={1} step={0.02} onChange={(low, high) => setInstMulti('pling', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.pling} />
+              <RangeSlider label="LFO Speed" low={music.pling.autoLfoSpeedMin} high={music.pling.autoLfoSpeedMax} min={0.1} max={10} step={0.1} onChange={(low, high) => setInstMulti('pling', { autoLfoSpeedMin: low, autoLfoSpeedMax: high })} color={SECTION_ACCENTS.pling} />
+              <RangeSlider label="LFO Depth" low={music.pling.autoLfoDepthMin} high={music.pling.autoLfoDepthMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('pling', { autoLfoDepthMin: low, autoLfoDepthMax: high })} color={SECTION_ACCENTS.pling} />
+              <RangeSlider label="Trigger %" low={music.pling.autoTriggerMin} high={music.pling.autoTriggerMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('pling', { autoTriggerMin: low, autoTriggerMax: high })} color={SECTION_ACCENTS.pling} />
+            </AutoSection>
+          </Card>
 
-          {/* Pad */}
-          <Section title="Pad">
-            <label className="flex items-center gap-2 cursor-pointer py-0.5">
-              <input type="checkbox" checked={preset.musicInstruments.pad} onChange={e => setPresetInst('pad', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
-              <span className="text-[11px] text-white/60">Enabled (preset {editingPreset + 1})</span>
-            </label>
-            <Slider label="Volume" value={m.pad.volume} min={0} max={1} step={0.05} onChange={v => setInst('pad', 'volume', v)} />
-            <Slider label="Chord Interval (bars)" value={m.pad.chordInterval} min={1} max={8} step={1} onChange={v => setInst('pad', 'chordInterval', v)} />
-            <Slider label="Reverb" value={m.pad.reverb} min={0} max={1} step={0.05} onChange={v => setInst('pad', 'reverb', v)} />
-          </Section>
+          <Card
+            title="Plong"
+            accent={SECTION_ACCENTS.plong}
+            collapsed={!plongOpen}
+            onToggle={() => setPlongOpen((value) => !value)}
+            action={<ToggleChip enabled={preset.musicInstruments.mid1} onToggle={(value) => setPresetInst('mid1', value)} accent={SECTION_ACCENTS.plong} />}
+          >
+            <SoundButtons value={music.mid1.sound} onChange={(value) => setInst('mid1', 'sound', value)} accent={SECTION_ACCENTS.plong} />
+            <RangeSlider label="Volume" low={music.mid1.volumeMin} high={music.mid1.volumeMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('mid1', { volumeMin: low, volumeMax: high })} color={SECTION_ACCENTS.plong} />
+            <SpeedButtons value={music.mid1.speed} onChange={(value) => setInst('mid1', 'speed', value)} accent={SECTION_ACCENTS.plong} />
+            <RangeSlider label="Octave" low={music.mid1.octaveLow} high={music.mid1.octaveHigh} min={1} max={6} step={1} onChange={(low, high) => setInstMulti('mid1', { octaveLow: low, octaveHigh: high })} color={SECTION_ACCENTS.plong} />
+            <Slider label="Detune" value={music.mid1.detune} min={0} max={3} step={0.1} onChange={(value) => setInst('mid1', 'detune', value)} color={SECTION_ACCENTS.plong} />
+            <Slider label="Delay" value={music.mid1.delay} min={0} max={1} step={0.05} onChange={(value) => setInst('mid1', 'delay', value)} color={SECTION_ACCENTS.plong} />
+            <Slider label="Reverb" value={music.mid1.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('mid1', 'reverb', value)} color={SECTION_ACCENTS.plong} />
+            <AutoSection accent={SECTION_ACCENTS.plong}>
+              <Slider label="Auto Speed" value={music.mid1.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('mid1', 'autoSpeed', value)} color={SECTION_ACCENTS.plong} />
+              <RangeSlider label="Filter" low={music.mid1.autoFilterMin} high={music.mid1.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('mid1', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.plong} />
+              <RangeSlider label="Decay" low={music.mid1.autoDecayMin} high={music.mid1.autoDecayMax} min={0.2} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid1', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.plong} />
+              <RangeSlider label="FM" low={music.mid1.autoFmMin} high={music.mid1.autoFmMax} min={0} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid1', { autoFmMin: low, autoFmMax: high })} color={SECTION_ACCENTS.plong} />
+              <RangeSlider label="Trigger %" low={music.mid1.autoTriggerMin} high={music.mid1.autoTriggerMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('mid1', { autoTriggerMin: low, autoTriggerMax: high })} color={SECTION_ACCENTS.plong} />
+            </AutoSection>
+          </Card>
 
-          {/* Visual Reactions */}
-          <Section title="Visual Reactions">
-            <Slider label="Swirl Strength" value={m.visualReactions.swirlStrength} min={0} max={1} step={0.05} onChange={v => setVR('swirlStrength', v)} />
-            <Slider label="Swirl Radius" value={m.visualReactions.swirlRadius} min={0.05} max={0.5} step={0.01} onChange={v => setVR('swirlRadius', v)} />
-            <Slider label="Size Pulse" value={m.visualReactions.sizePulseStrength} min={0} max={1} step={0.05} onChange={v => setVR('sizePulseStrength', v)} />
-            <Slider label="Bass Boost" value={m.visualReactions.bassSizeBoost} min={0} max={1} step={0.05} onChange={v => setVR('bassSizeBoost', v)} />
-          </Section>
+          <Card
+            title="Bong"
+            accent={SECTION_ACCENTS.bong}
+            collapsed={!bongOpen}
+            onToggle={() => setBongOpen((value) => !value)}
+            action={<ToggleChip enabled={preset.musicInstruments.mid2} onToggle={(value) => setPresetInst('mid2', value)} accent={SECTION_ACCENTS.bong} />}
+          >
+            <SoundButtons value={music.mid2.sound} onChange={(value) => setInst('mid2', 'sound', value)} accent={SECTION_ACCENTS.bong} />
+            <RangeSlider label="Volume" low={music.mid2.volumeMin} high={music.mid2.volumeMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('mid2', { volumeMin: low, volumeMax: high })} color={SECTION_ACCENTS.bong} />
+            <SpeedButtons value={music.mid2.speed} onChange={(value) => setInst('mid2', 'speed', value)} accent={SECTION_ACCENTS.bong} />
+            <RangeSlider label="Octave" low={music.mid2.octaveLow} high={music.mid2.octaveHigh} min={1} max={6} step={1} onChange={(low, high) => setInstMulti('mid2', { octaveLow: low, octaveHigh: high })} color={SECTION_ACCENTS.bong} />
+            <Slider label="Detune" value={music.mid2.detune} min={0} max={3} step={0.1} onChange={(value) => setInst('mid2', 'detune', value)} color={SECTION_ACCENTS.bong} />
+            <Slider label="Delay" value={music.mid2.delay} min={0} max={1} step={0.05} onChange={(value) => setInst('mid2', 'delay', value)} color={SECTION_ACCENTS.bong} />
+            <Slider label="Reverb" value={music.mid2.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('mid2', 'reverb', value)} color={SECTION_ACCENTS.bong} />
+            <AutoSection accent={SECTION_ACCENTS.bong}>
+              <Slider label="Auto Speed" value={music.mid2.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('mid2', 'autoSpeed', value)} color={SECTION_ACCENTS.bong} />
+              <RangeSlider label="Filter" low={music.mid2.autoFilterMin} high={music.mid2.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('mid2', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.bong} />
+              <RangeSlider label="Decay" low={music.mid2.autoDecayMin} high={music.mid2.autoDecayMax} min={0.2} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid2', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.bong} />
+              <RangeSlider label="FM" low={music.mid2.autoFmMin} high={music.mid2.autoFmMax} min={0} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid2', { autoFmMin: low, autoFmMax: high })} color={SECTION_ACCENTS.bong} />
+              <RangeSlider label="Trigger %" low={music.mid2.autoTriggerMin} high={music.mid2.autoTriggerMax} min={0} max={1} step={0.05} onChange={(low, high) => setInstMulti('mid2', { autoTriggerMin: low, autoTriggerMax: high })} color={SECTION_ACCENTS.bong} />
+            </AutoSection>
+          </Card>
 
+          <Card
+            title="Pad"
+            accent={SECTION_ACCENTS.pad}
+            collapsed={!padOpen}
+            onToggle={() => setPadOpen((value) => !value)}
+            action={<ToggleChip enabled={preset.musicInstruments.pad} onToggle={(value) => setPresetInst('pad', value)} accent={SECTION_ACCENTS.pad} />}
+          >
+            <Slider label="Volume" value={music.pad.volume} min={0} max={1} step={0.05} onChange={(value) => setInst('pad', 'volume', value)} color={SECTION_ACCENTS.pad} />
+            <Slider label="Bars" value={music.pad.chordInterval} min={1} max={8} step={1} onChange={(value) => setInst('pad', 'chordInterval', value)} color={SECTION_ACCENTS.pad} />
+            <RangeSlider label="Octave" low={music.pad.octaveLow} high={music.pad.octaveHigh} min={1} max={5} step={1} onChange={(low, high) => setInstMulti('pad', { octaveLow: low, octaveHigh: high })} color={SECTION_ACCENTS.pad} />
+            <Slider label="Filter" value={music.pad.filterCutoff} min={100} max={4000} step={50} onChange={(value) => setInst('pad', 'filterCutoff', value)} color={SECTION_ACCENTS.pad} />
+            <Slider label="Detune" value={music.pad.detune} min={0} max={20} step={1} onChange={(value) => setInst('pad', 'detune', value)} color={SECTION_ACCENTS.pad} />
+            <Slider label="Reverb" value={music.pad.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('pad', 'reverb', value)} color={SECTION_ACCENTS.pad} />
+          </Card>
+
+          <Card title="Visual Reactions" accent={SECTION_ACCENTS.vr} collapsed={!vrOpen} onToggle={() => setVrOpen((value) => !value)}>
+            <Slider label="Swirl" value={music.visualReactions.swirlStrength} min={0} max={1} step={0.05} onChange={(value) => setVR('swirlStrength', value)} color={SECTION_ACCENTS.vr} />
+            <Slider label="Radius" value={music.visualReactions.swirlRadius} min={0.05} max={0.5} step={0.01} onChange={(value) => setVR('swirlRadius', value)} color={SECTION_ACCENTS.vr} />
+            <Slider label="Pulse" value={music.visualReactions.sizePulseStrength} min={0} max={1} step={0.05} onChange={(value) => setVR('sizePulseStrength', value)} color={SECTION_ACCENTS.vr} />
+            <Slider label="Bass" value={music.visualReactions.bassSizeBoost} min={0} max={1} step={0.05} onChange={(value) => setVR('bassSizeBoost', value)} color={SECTION_ACCENTS.vr} />
+          </Card>
         </div>
+      </div>
+
+      <div className="absolute top-0 bottom-0 z-20" style={{ right: -4, width: 10 }} onPointerDown={startResize}>
+        <GripDots />
       </div>
     </div>
   );

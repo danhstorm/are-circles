@@ -1,4 +1,4 @@
-import { Settings, AppState, LivePreset, MediaPlayMode, MediaOverride } from '@/types';
+import { Settings, AppState, Scene, MediaPlayMode, MediaOverride } from '@/types';
 import { DEFAULT_PALETTE, templatePresets } from './presets';
 import { defaultMusicConfig } from '@/engine/music';
 
@@ -57,25 +57,37 @@ export const defaultSettings: Settings = {
   autoPresetInclude: [true, true, true, true, true, true, true, true, true],
 };
 
-function makeDefaultLivePresets(): [LivePreset, LivePreset, LivePreset] {
+function makeDefaultScenes(): [Scene, Scene, Scene] {
   return [
     {
       name: 'Calm',
       settings: templatePresets[0].settings,
       mediaEnabled: false,
+      soundEnabled: true,
       musicInstruments: { pling: true, mid1: false, mid2: false, pad: true },
+      presetTemplates: [],
+      cycleIntervalMin: 0,
+      cycleIntervalMax: 0,
     },
     {
       name: 'Breathing',
       settings: templatePresets[1].settings,
-      mediaEnabled: true,
+      mediaEnabled: false,
+      soundEnabled: false,
       musicInstruments: { pling: true, mid1: true, mid2: false, pad: true },
+      presetTemplates: [1, 2, 8],
+      cycleIntervalMin: 30,
+      cycleIntervalMax: 60,
     },
     {
       name: 'Active',
       settings: templatePresets[2].settings,
       mediaEnabled: true,
+      soundEnabled: false,
       musicInstruments: { pling: true, mid1: true, mid2: true, pad: true },
+      presetTemplates: [1, 2, 8],
+      cycleIntervalMin: 30,
+      cycleIntervalMax: 60,
     },
   ];
 }
@@ -83,17 +95,37 @@ function makeDefaultLivePresets(): [LivePreset, LivePreset, LivePreset] {
 export const defaultAppState: AppState = {
   version: '1',
   activePreset: 0,
-  livePresets: makeDefaultLivePresets(),
+  scenes: makeDefaultScenes(),
   globalColors: {
     backgroundColor: '#6B3A4A',
     paletteColors: [...DEFAULT_PALETTE],
     hueVariation: 15,
   },
   mediaOverrides: {},
+  hiddenMedia: [],
   mediaGridColumns: 40,
   transitionSpeed: 0.15,
   music: defaultMusicConfig,
 };
+
+export function computeVersionHash(state: AppState): string {
+  const content = JSON.stringify({
+    scenes: state.scenes,
+    globalColors: state.globalColors,
+    mediaOverrides: state.mediaOverrides,
+    hiddenMedia: state.hiddenMedia,
+    mediaGridColumns: state.mediaGridColumns,
+    transitionSpeed: state.transitionSpeed,
+    music: state.music,
+  });
+  let hash = 0;
+  for (let i = 0; i < content.length; i++) {
+    const chr = content.charCodeAt(i);
+    hash = ((hash << 5) - hash) + chr;
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
 
 export function loadAppState(): AppState {
   if (typeof window === 'undefined') return structuredClone(defaultAppState);
@@ -103,22 +135,43 @@ export function loadAppState(): AppState {
       const parsed = JSON.parse(stored);
       const base = structuredClone(defaultAppState);
       const merged = { ...base, ...parsed };
-      // Deep-merge livePresets so musicInstruments defaults are preserved
-      if (parsed.livePresets) {
-        merged.livePresets = base.livePresets.map((def: LivePreset, i: number) => {
-          const saved = parsed.livePresets[i];
+
+      // Migrate livePresets -> scenes
+      const savedScenes = parsed.scenes || parsed.livePresets;
+      if (savedScenes) {
+        merged.scenes = base.scenes.map((def: Scene, i: number) => {
+          const saved = savedScenes[i];
           if (!saved) return def;
           return {
             ...def,
             ...saved,
+            soundEnabled: saved.soundEnabled ?? def.soundEnabled,
+            presetTemplates: saved.presetTemplates ?? def.presetTemplates,
+            cycleIntervalMin: saved.cycleIntervalMin ?? saved.cycleInterval ?? def.cycleIntervalMin,
+            cycleIntervalMax: saved.cycleIntervalMax ?? saved.cycleInterval ?? def.cycleIntervalMax,
             musicInstruments: { ...def.musicInstruments, ...(saved.musicInstruments || {}) },
           };
-        }) as [LivePreset, LivePreset, LivePreset];
+        }) as [Scene, Scene, Scene];
       }
+      // Remove deprecated field
+      delete merged.livePresets;
+
       // Deep-merge music config
       if (parsed.music) {
-        merged.music = { ...base.music, ...parsed.music };
+        merged.music = {
+          ...base.music,
+          ...parsed.music,
+          pling: { ...base.music.pling, ...(parsed.music.pling || {}) },
+          mid1: { ...base.music.mid1, ...(parsed.music.mid1 || {}) },
+          mid2: { ...base.music.mid2, ...(parsed.music.mid2 || {}) },
+          pad: { ...base.music.pad, ...(parsed.music.pad || {}) },
+          visualReactions: { ...base.music.visualReactions, ...(parsed.music.visualReactions || {}) },
+        };
       }
+
+      // Ensure hiddenMedia exists
+      if (!merged.hiddenMedia) merged.hiddenMedia = [];
+
       return merged;
     }
   } catch { /* fall through */ }
@@ -132,14 +185,14 @@ export function saveAppState(state: AppState): void {
   } catch { /* ignore */ }
 }
 
-export function buildRendererSettings(preset: LivePreset, state: AppState): Settings {
+export function buildRendererSettings(scene: Scene, state: AppState): Settings {
   return {
     ...defaultSettings,
-    ...preset.settings,
+    ...scene.settings,
     backgroundColor: state.globalColors.backgroundColor,
     paletteColors: state.globalColors.paletteColors,
     hueVariation: state.globalColors.hueVariation,
-    mediaEnabled: preset.mediaEnabled,
+    mediaEnabled: scene.mediaEnabled,
     mediaAutoGrid: true,
     mediaGridColumns: state.mediaGridColumns,
     presetTransitionSpeed: state.transitionSpeed,
@@ -152,13 +205,100 @@ export async function syncWithServer(current: AppState): Promise<AppState> {
   try {
     const res = await fetch('/settings.json', { cache: 'no-store' });
     if (!res.ok) return current;
-    const server = await res.json() as AppState;
-    if (parseInt(server.version) > parseInt(current.version)) {
-      saveAppState(server);
-      return server;
+    const server = await res.json();
+
+    // Migrate server data: livePresets -> scenes
+    if (server.livePresets && !server.scenes) {
+      server.scenes = server.livePresets;
+      delete server.livePresets;
+    }
+
+    // Hash-based comparison: if server version differs, server wins
+    if (server.version && server.version !== current.version) {
+      // Deep-merge server state with defaults to fill any missing fields
+      const base = structuredClone(defaultAppState);
+      const merged = { ...base, ...server };
+      if (server.scenes) {
+        merged.scenes = base.scenes.map((def: Scene, i: number) => {
+          const saved = server.scenes[i];
+          if (!saved) return def;
+          return {
+            ...def,
+            ...saved,
+            soundEnabled: saved.soundEnabled ?? def.soundEnabled,
+            presetTemplates: saved.presetTemplates ?? def.presetTemplates,
+            cycleIntervalMin: saved.cycleIntervalMin ?? saved.cycleInterval ?? def.cycleIntervalMin,
+            cycleIntervalMax: saved.cycleIntervalMax ?? saved.cycleInterval ?? def.cycleIntervalMax,
+            musicInstruments: { ...def.musicInstruments, ...(saved.musicInstruments || {}) },
+          };
+        }) as [Scene, Scene, Scene];
+      }
+      if (server.music) {
+        merged.music = {
+          ...base.music,
+          ...server.music,
+          pling: { ...base.music.pling, ...(server.music.pling || {}) },
+          mid1: { ...base.music.mid1, ...(server.music.mid1 || {}) },
+          mid2: { ...base.music.mid2, ...(server.music.mid2 || {}) },
+          pad: { ...base.music.pad, ...(server.music.pad || {}) },
+          visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
+        };
+      }
+      if (!merged.hiddenMedia) merged.hiddenMedia = [];
+      delete merged.livePresets;
+      saveAppState(merged);
+      return merged;
     }
   } catch { /* offline or no file yet */ }
   return current;
+}
+
+export function resetToServerDefaults(): Promise<AppState> {
+  return fetch('/settings.json', { cache: 'no-store' })
+    .then(r => r.json())
+    .then(server => {
+      if (server.livePresets && !server.scenes) {
+        server.scenes = server.livePresets;
+        delete server.livePresets;
+      }
+      const base = structuredClone(defaultAppState);
+      const merged = { ...base, ...server };
+      if (server.scenes) {
+        merged.scenes = base.scenes.map((def: Scene, i: number) => {
+          const saved = server.scenes[i];
+          if (!saved) return def;
+          return {
+            ...def,
+            ...saved,
+            soundEnabled: saved.soundEnabled ?? def.soundEnabled,
+            presetTemplates: saved.presetTemplates ?? def.presetTemplates,
+            cycleIntervalMin: saved.cycleIntervalMin ?? saved.cycleInterval ?? def.cycleIntervalMin,
+            cycleIntervalMax: saved.cycleIntervalMax ?? saved.cycleInterval ?? def.cycleIntervalMax,
+            musicInstruments: { ...def.musicInstruments, ...(saved.musicInstruments || {}) },
+          };
+        }) as [Scene, Scene, Scene];
+      }
+      if (server.music) {
+        merged.music = {
+          ...base.music,
+          ...server.music,
+          pling: { ...base.music.pling, ...(server.music.pling || {}) },
+          mid1: { ...base.music.mid1, ...(server.music.mid1 || {}) },
+          mid2: { ...base.music.mid2, ...(server.music.mid2 || {}) },
+          pad: { ...base.music.pad, ...(server.music.pad || {}) },
+          visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
+        };
+      }
+      if (!merged.hiddenMedia) merged.hiddenMedia = [];
+      delete merged.livePresets;
+      saveAppState(merged);
+      return merged;
+    })
+    .catch(() => {
+      const defaults = structuredClone(defaultAppState);
+      saveAppState(defaults);
+      return defaults;
+    });
 }
 
 function migrateOldState(): AppState {
@@ -169,7 +309,7 @@ function migrateOldState(): AppState {
     const oldSettings = localStorage.getItem(OLD_SETTINGS_KEY);
     if (oldSettings) {
       const s = JSON.parse(oldSettings) as Partial<Settings>;
-      state.livePresets[0].settings = { ...state.livePresets[0].settings, ...s };
+      state.scenes[0].settings = { ...state.scenes[0].settings, ...s };
       if (s.backgroundColor) state.globalColors.backgroundColor = s.backgroundColor;
       if (s.paletteColors) state.globalColors.paletteColors = s.paletteColors;
       if (s.hueVariation !== undefined) state.globalColors.hueVariation = s.hueVariation;
@@ -181,7 +321,7 @@ function migrateOldState(): AppState {
     if (oldPresets) {
       const arr = JSON.parse(oldPresets) as (Partial<Settings> | null)[];
       for (let i = 0; i < 3 && i < arr.length; i++) {
-        if (arr[i]) state.livePresets[i].settings = { ...state.livePresets[i].settings, ...arr[i] };
+        if (arr[i]) state.scenes[i].settings = { ...state.scenes[i].settings, ...arr[i] };
       }
     }
 
@@ -189,12 +329,11 @@ function migrateOldState(): AppState {
     if (oldOverrides) {
       const ov = JSON.parse(oldOverrides) as Record<string, { playMode: MediaPlayMode; invert: boolean }>;
       for (const [src, data] of Object.entries(ov)) {
-        state.mediaOverrides[src] = { ...data, intensity: 0.7 };
+        state.mediaOverrides[src] = { ...data, intensity: 0.7, contrast: 0 };
       }
     }
   } catch { /* ignore migration errors */ }
 
-  // Clean up old keys
   try {
     localStorage.removeItem(OLD_SETTINGS_KEY);
     localStorage.removeItem(OLD_PRESETS_KEY);
@@ -207,14 +346,5 @@ function migrateOldState(): AppState {
 }
 
 export function getMediaOverride(state: AppState, src: string): MediaOverride {
-  return state.mediaOverrides[src] || { playMode: 'loop', invert: false, intensity: 0.7 };
-}
-
-export function loadHiddenMedia(): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(OLD_HIDDEN_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch { /* ignore */ }
-  return [];
+  return state.mediaOverrides[src] || { playMode: 'loop', invert: false, intensity: 0.7, contrast: 0 };
 }

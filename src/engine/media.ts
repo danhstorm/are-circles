@@ -20,11 +20,12 @@ export class MediaEngine {
   private queuedIndex = -1;
   private sampleAccum = 0;
   private sampleInterval = 1 / 15;
-  // Pingpong state
   private pingpongReverse = false;
   private pingpongTime = 0;
   private enabled = true;
   private intensityMap: Map<string, number> = new Map();
+  private contrastMap: Map<string, number> = new Map();
+  private invertMap: Map<string, boolean> = new Map();
 
   get intensity() {
     return this.fadeProgress;
@@ -50,6 +51,13 @@ export class MediaEngine {
 
   setItems(items: MediaItem[]) {
     this.items = items;
+    // Update currentItem reference if still playing
+    if (this.currentIndex >= 0 && this.currentIndex < items.length && this.currentItem) {
+      const newItem = items[this.currentIndex];
+      if (newItem && newItem.src === this.currentItem.src) {
+        this.currentItem = newItem;
+      }
+    }
     if (this.currentIndex >= items.length) {
       this.currentIndex = -1;
       this.fadeDirection = 'idle';
@@ -66,9 +74,33 @@ export class MediaEngine {
     }
   }
 
+  setContrastMap(map: Record<string, number>) {
+    this.contrastMap.clear();
+    for (const [src, val] of Object.entries(map)) {
+      this.contrastMap.set(src, val);
+    }
+  }
+
+  setInvertMap(map: Record<string, boolean>) {
+    this.invertMap.clear();
+    for (const [src, val] of Object.entries(map)) {
+      this.invertMap.set(src, val);
+    }
+  }
+
   private getCurrentIntensity(): number {
     if (!this.currentItem) return 0.7;
     return this.intensityMap.get(this.currentItem.src) ?? 0.7;
+  }
+
+  private getCurrentContrast(): number {
+    if (!this.currentItem) return 0;
+    return this.contrastMap.get(this.currentItem.src) ?? 0;
+  }
+
+  private getCurrentInvert(): boolean {
+    if (!this.currentItem) return false;
+    return this.invertMap.get(this.currentItem.src) ?? false;
   }
 
   triggerNext() {
@@ -82,7 +114,6 @@ export class MediaEngine {
 
   triggerByIndex(idx: number) {
     if (idx < 0 || idx >= this.items.length || !this.enabled) return;
-    // Interrupt current and start new immediately
     this.cleanupCurrent();
     this.queuedIndex = -1;
     this.currentIndex = idx;
@@ -163,7 +194,6 @@ export class MediaEngine {
     if (!v || !this.pingpongReverse) return;
 
     if (v.playbackRate < 0) {
-      // Native reverse playback: check if we reached the start
       if (v.currentTime <= 0.05) {
         this.pingpongReverse = false;
         v.playbackRate = 1;
@@ -171,7 +201,6 @@ export class MediaEngine {
         v.play();
       }
     } else {
-      // Manual fallback: track time independently for reliable seeking
       this.pingpongTime = Math.max(0, this.pingpongTime - dt);
       v.currentTime = this.pingpongTime;
       if (this.pingpongTime <= 0.05) {
@@ -189,7 +218,8 @@ export class MediaEngine {
     this.ctx.drawImage(this.videoEl, 0, 0, this.sampleWidth, this.sampleHeight);
     const data = this.ctx.getImageData(0, 0, this.sampleWidth, this.sampleHeight).data;
 
-    const invert = this.currentItem?.invert ?? false;
+    // Read invert from map (live-updated) rather than stale currentItem
+    const invert = this.getCurrentInvert();
 
     for (let i = 0; i < this.brightness.length; i++) {
       const idx = i * 4;
@@ -203,7 +233,19 @@ export class MediaEngine {
     const x = Math.floor(nx * (this.sampleWidth - 1));
     const y = Math.floor(ny * (this.sampleHeight - 1));
     const idx = y * this.sampleWidth + x;
-    return (this.brightness[idx] || 0) * this.fadeProgress * this.getCurrentIntensity();
+    let b = this.brightness[idx] || 0;
+    const blackPoint = this.getCurrentContrast();
+    if (blackPoint > 0.001) {
+      b = Math.max(0, (b - blackPoint) / (1 - blackPoint));
+    }
+    return b * this.fadeProgress * this.getCurrentIntensity();
+  }
+
+  getContrastBrightness(brightness: number, contrast: number): number {
+    if (contrast > 0.001) {
+      return Math.max(0, (brightness - contrast) / (1 - contrast));
+    }
+    return brightness;
   }
 
   getRawBrightness(nx: number, ny: number): number {
@@ -239,7 +281,6 @@ export class MediaEngine {
         this.fadeDirection = 'out';
       }
     } else if (this.fadeDirection === 'out') {
-      // Keep sampling during fade-out so animation continues
       if (shouldSample) this.sampleBrightness();
       this.fadeProgress = Math.max(0, this.fadeProgress - dt / this.fadeDuration);
       if (this.fadeProgress <= 0) {

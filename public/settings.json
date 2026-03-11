@@ -1,7 +1,7 @@
 {
-  "version": "2",
+  "version": "3",
   "activePreset": 0,
-  "livePresets": [
+  "scenes": [
     {
       "name": "Calm",
       "settings": {
@@ -19,13 +19,16 @@
         "waveStrength": 0,
         "waveFrequency": 0.3,
         "waveSpeed": 0.2,
-        "mediaEnabled": false,
         "opacityMin": 0.2,
         "opacityMax": 0.7,
         "depthOfField": 0.7
       },
       "mediaEnabled": false,
-      "musicInstruments": { "pling": true, "mid1": false, "mid2": false, "pad": true }
+      "soundEnabled": true,
+      "musicInstruments": { "pling": true, "mid1": false, "mid2": false, "pad": true },
+      "presetTemplates": [],
+      "cycleIntervalMin": 0,
+      "cycleIntervalMax": 0
     },
     {
       "name": "Breathing",
@@ -44,13 +47,16 @@
         "waveStrength": 0.4,
         "waveFrequency": 0.25,
         "waveSpeed": 0.4,
-        "mediaEnabled": true,
         "opacityMin": 0.3,
         "opacityMax": 0.85,
         "depthOfField": 0.5
       },
-      "mediaEnabled": true,
-      "musicInstruments": { "pling": true, "mid1": true, "mid2": false, "pad": true }
+      "mediaEnabled": false,
+      "soundEnabled": false,
+      "musicInstruments": { "pling": true, "mid1": true, "mid2": false, "pad": true },
+      "presetTemplates": [1, 2, 8],
+      "cycleIntervalMin": 30,
+      "cycleIntervalMax": 60
     },
     {
       "name": "Active",
@@ -69,13 +75,16 @@
         "waveStrength": 0.6,
         "waveFrequency": 0.12,
         "waveSpeed": 0.7,
-        "mediaEnabled": true,
         "opacityMin": 0.4,
         "opacityMax": 0.95,
         "depthOfField": 0.3
       },
       "mediaEnabled": true,
-      "musicInstruments": { "pling": true, "mid1": true, "mid2": true, "pad": true }
+      "soundEnabled": false,
+      "musicInstruments": { "pling": true, "mid1": true, "mid2": true, "pad": true },
+      "presetTemplates": [1, 2, 8],
+      "cycleIntervalMin": 30,
+      "cycleIntervalMax": 60
     }
   ],
   "globalColors": {
@@ -84,16 +93,36 @@
     "hueVariation": 15
   },
   "mediaOverrides": {},
+  "hiddenMedia": [],
   "mediaGridColumns": 40,
   "transitionSpeed": 0.15,
   "music": {
     "scale": "pentatonic-major",
-    "tempo": 60,
-    "masterVolume": 0.6,
-    "pling": { "volume": 0.3, "speed": "1/8", "triggerProbability": 0.4, "delay": 0.3, "reverb": 0.5, "lfoSpeed": 2, "lfoDepth": 0.4, "octaveLow": 4, "octaveHigh": 6, "filterCutoff": 2000, "filterQ": 2, "decay": 0.15 },
-    "mid1": { "volume": 0.5, "sound": "rhodes", "speed": "1/4", "triggerProbability": 0.3, "delay": 0.2, "reverb": 0.4 },
-    "mid2": { "volume": 0.4, "sound": "kalimba", "speed": "1/4", "triggerProbability": 0.2, "delay": 0.3, "reverb": 0.5 },
-    "pad": { "volume": 0.25, "chordInterval": 4, "reverb": 0.6 },
-    "visualReactions": { "swirlStrength": 0.5, "swirlRadius": 0.15, "sizePulseStrength": 0.4, "bassSizeBoost": 0.3 }
+    "tempo": 54,
+    "masterVolume": 0.7,
+    "pling": {
+      "volumeMin": 0.1, "volumeMax": 0.35, "speed": "1/8", "triggerProbability": 0.35,
+      "delay": 0.4, "reverb": 0.6, "lfoSpeed": 1.5, "lfoDepth": 0.3,
+      "octaveLow": 4, "octaveHigh": 7, "filterCutoff": 3000, "filterQ": 1.5, "decay": 0.2,
+      "autoFilterMin": 1200, "autoFilterMax": 4500, "autoDecayMin": 0.08, "autoDecayMax": 0.3,
+      "autoLfoSpeedMin": 1.5, "autoLfoSpeedMax": 1.5, "autoLfoDepthMin": 0.3, "autoLfoDepthMax": 0.3,
+      "autoTriggerMin": 0.35, "autoTriggerMax": 0.35, "autoSpeed": 0.06
+    },
+    "mid1": {
+      "volumeMin": 0.2, "volumeMax": 0.5, "sound": "glass", "speed": "1/2", "triggerProbability": 0.35,
+      "octaveLow": 3, "octaveHigh": 5, "filterCutoff": 3000, "decay": 1.5, "fmAmount": 0.6, "detune": 1.2,
+      "delay": 0.3, "reverb": 0.5,
+      "autoFilterMin": 3000, "autoFilterMax": 3000, "autoDecayMin": 1.5, "autoDecayMax": 1.5,
+      "autoFmMin": 0.6, "autoFmMax": 0.6, "autoTriggerMin": 0.35, "autoTriggerMax": 0.35, "autoSpeed": 0.04
+    },
+    "mid2": {
+      "volumeMin": 0.15, "volumeMax": 0.4, "sound": "rhodes", "speed": "1/4", "triggerProbability": 0.2,
+      "octaveLow": 2, "octaveHigh": 4, "filterCutoff": 2000, "decay": 2.0, "fmAmount": 0.8, "detune": 0.8,
+      "delay": 0.4, "reverb": 0.6,
+      "autoFilterMin": 2000, "autoFilterMax": 2000, "autoDecayMin": 2.0, "autoDecayMax": 2.0,
+      "autoFmMin": 0.8, "autoFmMax": 0.8, "autoTriggerMin": 0.2, "autoTriggerMax": 0.2, "autoSpeed": 0.04
+    },
+    "pad": { "volume": 0.2, "chordInterval": 4, "reverb": 0.7, "filterCutoff": 600, "detune": 7, "octaveLow": 2, "octaveHigh": 3 },
+    "visualReactions": { "swirlStrength": 0.2, "swirlRadius": 0.08, "sizePulseStrength": 0.15, "bassSizeBoost": 0.15 }
   }
 }

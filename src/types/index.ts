@@ -22,6 +22,7 @@ export interface Particle {
   mediaGridY: number;
   noiseOffsetX: number;
   noiseOffsetY: number;
+  notePulse: number;
 }
 
 export interface AudioData {
@@ -103,7 +104,8 @@ export type MidSound = 'xylophone' | 'rhodes' | 'breathy' | 'bell' | 'kalimba' |
 export type SpeedSubdivision = '1/1' | '1/2' | '1/3' | '1/4' | '1/6' | '1/8' | '1/16';
 
 export interface PlingConfig {
-  volume: number;
+  volumeMin: number;
+  volumeMax: number;
   speed: SpeedSubdivision;
   triggerProbability: number;
   delay: number;
@@ -115,21 +117,54 @@ export interface PlingConfig {
   filterCutoff: number;
   filterQ: number;
   decay: number;
+  // Automation ranges (ping-pong). When min === max, automation is off.
+  autoFilterMin: number;
+  autoFilterMax: number;
+  autoDecayMin: number;
+  autoDecayMax: number;
+  autoLfoSpeedMin: number;
+  autoLfoSpeedMax: number;
+  autoLfoDepthMin: number;
+  autoLfoDepthMax: number;
+  autoTriggerMin: number;
+  autoTriggerMax: number;
+  autoSpeed: number;
 }
 
 export interface MidConfig {
-  volume: number;
+  volumeMin: number;
+  volumeMax: number;
   sound: MidSound;
   speed: SpeedSubdivision;
   triggerProbability: number;
+  octaveLow: number;
+  octaveHigh: number;
+  filterCutoff: number;
+  decay: number;
+  fmAmount: number;
+  detune: number;
   delay: number;
   reverb: number;
+  // Automation ranges (ping-pong). When min === max, automation is off.
+  autoFilterMin: number;
+  autoFilterMax: number;
+  autoDecayMin: number;
+  autoDecayMax: number;
+  autoFmMin: number;
+  autoFmMax: number;
+  autoTriggerMin: number;
+  autoTriggerMax: number;
+  autoSpeed: number;
 }
 
 export interface PadConfig {
   volume: number;
   chordInterval: number;
   reverb: number;
+  filterCutoff: number;
+  detune: number;
+  octaveLow: number;
+  octaveHigh: number;
 }
 
 export interface VisualReactionConfig {
@@ -152,28 +187,37 @@ export interface MusicConfig {
 
 // ─── App State Types ───
 
-export interface LivePreset {
+export interface Scene {
   name: string;
   settings: Partial<Settings>;
   mediaEnabled: boolean;
+  soundEnabled: boolean;
   musicInstruments: {
     pling: boolean;
     mid1: boolean;
     mid2: boolean;
     pad: boolean;
   };
+  presetTemplates: number[];
+  cycleIntervalMin: number;
+  cycleIntervalMax: number;
 }
+
+/** @deprecated Use Scene instead */
+export type LivePreset = Scene;
 
 export interface MediaOverride {
   playMode: MediaPlayMode;
   invert: boolean;
   intensity: number;
+  contrast: number;
 }
 
 export interface SwirlImpulse {
   x: number;
   y: number;
   strength: number;
+  radius: number;
   dx: number;
   dy: number;
   age: number;
@@ -183,13 +227,16 @@ export interface SwirlImpulse {
 export interface AppState {
   version: string;
   activePreset: number;
-  livePresets: [LivePreset, LivePreset, LivePreset];
+  scenes: [Scene, Scene, Scene];
+  /** @deprecated Use scenes instead */
+  livePresets?: [Scene, Scene, Scene];
   globalColors: {
     backgroundColor: string;
     paletteColors: string[];
     hueVariation: number;
   };
   mediaOverrides: Record<string, MediaOverride>;
+  hiddenMedia: string[];
   mediaGridColumns: number;
   transitionSpeed: number;
   music: MusicConfig;

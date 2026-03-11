@@ -1,5 +1,5 @@
 import {
-  MusicConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse,
+  MusicConfig, MidConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse,
 } from '@/types';
 
 const SCALES: Record<ScaleType, number[]> = {
@@ -8,16 +8,18 @@ const SCALES: Record<ScaleType, number[]> = {
 };
 
 const MID_PRESETS: Record<MidSound, {
-  modRatio: number; modIndex: number;
+  modRatio: number; modIndex: number; modDecay: number;
   attack: number; decay: number; sustain: number; release: number;
-  hasNoise?: boolean;
+  filterCutoff: number; filterQ: number;
+  detuneCents: number;
+  hasNoise?: boolean; noiseLevel?: number;
 }> = {
-  xylophone: { modRatio: 3.0, modIndex: 8, attack: 0.001, decay: 0.08, sustain: 0, release: 0.2 },
-  rhodes:    { modRatio: 1.0, modIndex: 2.5, attack: 0.005, decay: 0.3, sustain: 0.2, release: 0.5 },
-  breathy:   { modRatio: 0.5, modIndex: 0.8, attack: 0.05, decay: 0.4, sustain: 0.3, release: 0.8, hasNoise: true },
-  bell:      { modRatio: 3.5, modIndex: 10, attack: 0.001, decay: 0.5, sustain: 0.05, release: 1.0 },
-  kalimba:   { modRatio: 2.0, modIndex: 4, attack: 0.001, decay: 0.15, sustain: 0, release: 0.4 },
-  glass:     { modRatio: 1.5, modIndex: 1.0, attack: 0.01, decay: 0.6, sustain: 0.1, release: 0.8 },
+  xylophone: { modRatio: 3.0, modIndex: 5, modDecay: 0.06, attack: 0.002, decay: 1.2, sustain: 0, release: 1.5, filterCutoff: 4000, filterQ: 0.7, detuneCents: 3 },
+  rhodes:    { modRatio: 1.0, modIndex: 2.0, modDecay: 0.8, attack: 0.01, decay: 2.0, sustain: 0.15, release: 2.5, filterCutoff: 2500, filterQ: 0.5, detuneCents: 5 },
+  breathy:   { modRatio: 0.5, modIndex: 0.6, modDecay: 1.5, attack: 0.08, decay: 2.5, sustain: 0.25, release: 3.0, filterCutoff: 1800, filterQ: 0.4, detuneCents: 8, hasNoise: true, noiseLevel: 0.12 },
+  bell:      { modRatio: 3.5, modIndex: 6, modDecay: 1.0, attack: 0.002, decay: 3.0, sustain: 0.03, release: 4.0, filterCutoff: 5000, filterQ: 0.8, detuneCents: 2 },
+  kalimba:   { modRatio: 2.0, modIndex: 3, modDecay: 0.1, attack: 0.002, decay: 1.8, sustain: 0, release: 2.0, filterCutoff: 3000, filterQ: 0.6, detuneCents: 4 },
+  glass:     { modRatio: 1.5, modIndex: 0.8, modDecay: 2.0, attack: 0.02, decay: 3.5, sustain: 0.08, release: 4.0, filterCutoff: 3500, filterQ: 0.5, detuneCents: 6 },
 };
 
 function midiToFreq(midi: number): number {
@@ -79,13 +81,32 @@ function generateIR(ctx: AudioContext, duration: number, decay: number): AudioBu
 
 export const defaultMusicConfig: MusicConfig = {
   scale: 'pentatonic-major',
-  tempo: 60,
-  masterVolume: 0.6,
-  pling: { volume: 0.3, speed: '1/8', triggerProbability: 0.4, delay: 0.3, reverb: 0.5, lfoSpeed: 2, lfoDepth: 0.4, octaveLow: 4, octaveHigh: 6, filterCutoff: 2000, filterQ: 2, decay: 0.15 },
-  mid1: { volume: 0.5, sound: 'rhodes', speed: '1/4', triggerProbability: 0.3, delay: 0.2, reverb: 0.4 },
-  mid2: { volume: 0.4, sound: 'kalimba', speed: '1/4', triggerProbability: 0.2, delay: 0.3, reverb: 0.5 },
-  pad: { volume: 0.25, chordInterval: 4, reverb: 0.6 },
-  visualReactions: { swirlStrength: 0.5, swirlRadius: 0.15, sizePulseStrength: 0.4, bassSizeBoost: 0.3 },
+  tempo: 54,
+  masterVolume: 0.7,
+  pling: {
+    volumeMin: 0.1, volumeMax: 0.35, speed: '1/8', triggerProbability: 0.35,
+    delay: 0.4, reverb: 0.6, lfoSpeed: 1.5, lfoDepth: 0.3,
+    octaveLow: 4, octaveHigh: 7, filterCutoff: 3000, filterQ: 1.5, decay: 0.2,
+    autoFilterMin: 1200, autoFilterMax: 4500, autoDecayMin: 0.08, autoDecayMax: 0.3,
+    autoLfoSpeedMin: 1.5, autoLfoSpeedMax: 1.5, autoLfoDepthMin: 0.3, autoLfoDepthMax: 0.3,
+    autoTriggerMin: 0.35, autoTriggerMax: 0.35, autoSpeed: 0.06,
+  },
+  mid1: {
+    volumeMin: 0.2, volumeMax: 0.5, sound: 'glass', speed: '1/2', triggerProbability: 0.35,
+    octaveLow: 3, octaveHigh: 5, filterCutoff: 3000, decay: 1.5, fmAmount: 0.6, detune: 1.2,
+    delay: 0.3, reverb: 0.5,
+    autoFilterMin: 3000, autoFilterMax: 3000, autoDecayMin: 1.5, autoDecayMax: 1.5,
+    autoFmMin: 0.6, autoFmMax: 0.6, autoTriggerMin: 0.35, autoTriggerMax: 0.35, autoSpeed: 0.04,
+  },
+  mid2: {
+    volumeMin: 0.15, volumeMax: 0.4, sound: 'rhodes', speed: '1/4', triggerProbability: 0.2,
+    octaveLow: 2, octaveHigh: 4, filterCutoff: 2000, decay: 2.0, fmAmount: 0.8, detune: 0.8,
+    delay: 0.4, reverb: 0.6,
+    autoFilterMin: 2000, autoFilterMax: 2000, autoDecayMin: 2.0, autoDecayMax: 2.0,
+    autoFmMin: 0.8, autoFmMax: 0.8, autoTriggerMin: 0.2, autoTriggerMax: 0.2, autoSpeed: 0.04,
+  },
+  pad: { volume: 0.2, chordInterval: 4, reverb: 0.7, filterCutoff: 600, detune: 7, octaveLow: 2, octaveHigh: 3 },
+  visualReactions: { swirlStrength: 0.2, swirlRadius: 0.08, sizePulseStrength: 0.15, bassSizeBoost: 0.15 },
 };
 
 export class MusicEngine {
@@ -103,15 +124,19 @@ export class MusicEngine {
 
   private schedulerTimer: ReturnType<typeof setInterval> | null = null;
   private readonly LOOKAHEAD = 0.1;
-  private nextTime = { pling: 0, mid1: 0, mid2: 0 };
-  private padBeatCount = 0;
-  private padNextChordTime = 0;
+  private beatOrigin = 0;
+  private nextBeat = { pling: 0, mid1: 0, mid2: 0 };
+  private padNextChordBeat = 0;
   private padActiveChord: { oscs: OscillatorNode[]; gains: GainNode[] } | null = null;
 
   private noiseBuffer: AudioBuffer | null = null;
   private pendingSwirls: SwirlImpulse[] = [];
+  private pendingNotePulses: { count: number; strength: number }[] = [];
   private _sizePulse = 0;
   private _playing = false;
+  private autoPhase = 0;
+  private autoMid1Phase = 0;
+  private autoMid2Phase = 0;
 
   get isPlaying() { return this._playing; }
 
@@ -119,7 +144,7 @@ export class MusicEngine {
     this.config = config ? { ...config } : { ...defaultMusicConfig };
   }
 
-  async start() {
+  async start(fadeDur = 2) {
     if (this._playing) return;
     try {
       if (!this.ctx) {
@@ -133,11 +158,10 @@ export class MusicEngine {
       return;
     }
     this._playing = true;
-    const now = this.ctx.currentTime + 0.05;
-    this.nextTime = { pling: now, mid1: now, mid2: now };
-    this.padNextChordTime = now;
-    this.padBeatCount = 0;
-    this.fadeIn();
+    this.beatOrigin = this.ctx.currentTime + 0.05;
+    this.nextBeat = { pling: 0, mid1: 0, mid2: 0 };
+    this.padNextChordBeat = 0;
+    this.fadeIn(fadeDur);
     this.schedulerTimer = setInterval(() => this.schedule(), 25);
   }
 
@@ -156,16 +180,64 @@ export class MusicEngine {
   updateConfig(c: MusicConfig) {
     const old = this.config;
     this.config = { ...c };
+    if (this.ctx && this.masterGain) {
+      const t = this.ctx.currentTime;
+      if (c.masterVolume !== old.masterVolume) {
+        this.masterGain.gain.cancelScheduledValues(t);
+        this.masterGain.gain.setTargetAtTime(c.masterVolume, t, 0.05);
+      }
+    }
     if (this.delayNode && this.ctx) {
       this.delayNode.delayTime.setTargetAtTime(60 / c.tempo, this.ctx.currentTime, 0.1);
     }
-    // Reset scheduler times so new speeds/probabilities take effect immediately
+    // On tempo change, rebase the beat origin so instruments stay on the grid
+    if (this.ctx && this._playing && c.tempo !== old.tempo) {
+      const now = this.ctx.currentTime;
+      const oldBeatDur = 60 / old.tempo;
+      const currentBeat = (now - this.beatOrigin) / oldBeatDur;
+      this.beatOrigin = now - currentBeat * (60 / c.tempo);
+    }
+    // On speed change, snap instrument to next grid-aligned beat
     if (this.ctx && this._playing) {
       const now = this.ctx.currentTime;
-      if (c.pling.speed !== old.pling.speed || c.tempo !== old.tempo) this.nextTime.pling = now;
-      if (c.mid1.speed !== old.mid1.speed || c.tempo !== old.tempo) this.nextTime.mid1 = now;
-      if (c.mid2.speed !== old.mid2.speed || c.tempo !== old.tempo) this.nextTime.mid2 = now;
-      if (c.pad.chordInterval !== old.pad.chordInterval || c.tempo !== old.tempo) this.padNextChordTime = now;
+      const beatDur = 60 / c.tempo;
+      const currentBeat = (now - this.beatOrigin) / beatDur;
+      if (c.pling.speed !== old.pling.speed) {
+        const interval = subdivisionToBeats(c.pling.speed);
+        this.nextBeat.pling = Math.ceil(currentBeat / interval) * interval;
+      }
+      if (c.mid1.speed !== old.mid1.speed) {
+        const interval = subdivisionToBeats(c.mid1.speed);
+        this.nextBeat.mid1 = Math.ceil(currentBeat / interval) * interval;
+      }
+      if (c.mid2.speed !== old.mid2.speed) {
+        const interval = subdivisionToBeats(c.mid2.speed);
+        this.nextBeat.mid2 = Math.ceil(currentBeat / interval) * interval;
+      }
+      if (c.pad.chordInterval !== old.pad.chordInterval) {
+        const interval = c.pad.chordInterval * 4;
+        this.padNextChordBeat = Math.ceil(currentBeat / interval) * interval;
+      }
+    }
+    // Pad: update active chord volume in real-time
+    if (this.ctx && this.padActiveChord && c.pad.volume !== old.pad.volume) {
+      const t = this.ctx.currentTime;
+      const oscCount = this.padActiveChord.oscs.length;
+      const expVol = c.pad.volume * c.pad.volume / Math.sqrt(Math.max(1, oscCount));
+      for (const g of this.padActiveChord.gains) {
+        g.gain.cancelScheduledValues(t);
+        g.gain.setTargetAtTime(expVol, t, 0.1);
+      }
+    }
+    // Pad: retrigger chord if tonal/timbral params changed (filter, detune, octave, scale)
+    if (this.ctx && this._playing && this.instEnabled.pad && this.padActiveChord) {
+      const p = c.pad;
+      const op = old.pad;
+      if (p.filterCutoff !== op.filterCutoff || p.detune !== op.detune ||
+          p.octaveLow !== op.octaveLow || p.octaveHigh !== op.octaveHigh ||
+          c.scale !== old.scale) {
+        this.playPadChord(this.ctx.currentTime + 0.05);
+      }
     }
   }
 
@@ -193,6 +265,12 @@ export class MusicEngine {
   getSwirlImpulses(): SwirlImpulse[] {
     const out = this.pendingSwirls;
     this.pendingSwirls = [];
+    return out;
+  }
+
+  getNotePulses(): { count: number; strength: number }[] {
+    const out = this.pendingNotePulses;
+    this.pendingNotePulses = [];
     return out;
   }
 
@@ -247,58 +325,82 @@ export class MusicEngine {
 
   // ─── Scheduler ───
 
+  private beatToTime(beat: number): number {
+    return this.beatOrigin + beat * (60 / this.config.tempo);
+  }
+
+  private pingPong(phase: number, lo: number, hi: number): number {
+    if (lo >= hi) return lo;
+    const t = (Math.sin(phase) + 1) * 0.5;
+    return lo + t * (hi - lo);
+  }
+
   private schedule() {
     if (!this.ctx || !this._playing) return;
     const now = this.ctx.currentTime;
     const ahead = now + this.LOOKAHEAD;
-    const beatDur = 60 / this.config.tempo;
     const c = this.config;
 
-    // Pling
+    // Advance automation phases (continuous, based on wall time)
+    const elapsed = now - this.beatOrigin;
+    this.autoPhase = elapsed * c.pling.autoSpeed * Math.PI * 2;
+    this.autoMid1Phase = elapsed * c.mid1.autoSpeed * Math.PI * 2;
+    this.autoMid2Phase = elapsed * c.mid2.autoSpeed * Math.PI * 2;
+
+    // Pling (trigger probability is automated)
     if (this.instEnabled.pling) {
-      const interval = subdivisionToBeats(c.pling.speed) * beatDur;
-      while (this.nextTime.pling < ahead) {
-        if (Math.random() < c.pling.triggerProbability) {
-          this.playPling(this.nextTime.pling);
+      const interval = subdivisionToBeats(c.pling.speed);
+      const curTrigger = this.pingPong(this.autoPhase * 1.3, c.pling.autoTriggerMin, c.pling.autoTriggerMax);
+      while (this.beatToTime(this.nextBeat.pling) < ahead) {
+        if (Math.random() < curTrigger) {
+          this.playPling(this.beatToTime(this.nextBeat.pling));
         }
-        this.nextTime.pling += interval;
+        this.nextBeat.pling += interval;
       }
     } else {
-      if (this.nextTime.pling < ahead) this.nextTime.pling = now;
+      const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
+      if (this.nextBeat.pling < currentBeat) this.nextBeat.pling = currentBeat;
     }
 
-    // Mid1
+    // Mid1 (trigger probability, filter, decay, FM are automated)
     if (this.instEnabled.mid1) {
-      const interval = subdivisionToBeats(c.mid1.speed) * beatDur;
-      while (this.nextTime.mid1 < ahead) {
-        if (Math.random() < c.mid1.triggerProbability) {
-          this.playMid(this.nextTime.mid1, c.mid1);
+      const interval = subdivisionToBeats(c.mid1.speed);
+      const curTrigger = this.pingPong(this.autoMid1Phase * 1.3, c.mid1.autoTriggerMin, c.mid1.autoTriggerMax);
+      while (this.beatToTime(this.nextBeat.mid1) < ahead) {
+        if (Math.random() < curTrigger) {
+          this.playMid(this.beatToTime(this.nextBeat.mid1), c.mid1, this.autoMid1Phase);
         }
-        this.nextTime.mid1 += interval;
+        this.nextBeat.mid1 += interval;
       }
     } else {
-      if (this.nextTime.mid1 < ahead) this.nextTime.mid1 = now;
+      const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
+      if (this.nextBeat.mid1 < currentBeat) this.nextBeat.mid1 = currentBeat;
     }
 
-    // Mid2
+    // Mid2 (trigger probability, filter, decay, FM are automated)
     if (this.instEnabled.mid2) {
-      const interval = subdivisionToBeats(c.mid2.speed) * beatDur;
-      while (this.nextTime.mid2 < ahead) {
-        if (Math.random() < c.mid2.triggerProbability) {
-          this.playMid(this.nextTime.mid2, c.mid2);
+      const interval = subdivisionToBeats(c.mid2.speed);
+      const curTrigger = this.pingPong(this.autoMid2Phase * 1.3, c.mid2.autoTriggerMin, c.mid2.autoTriggerMax);
+      while (this.beatToTime(this.nextBeat.mid2) < ahead) {
+        if (Math.random() < curTrigger) {
+          this.playMid(this.beatToTime(this.nextBeat.mid2), c.mid2, this.autoMid2Phase);
         }
-        this.nextTime.mid2 += interval;
+        this.nextBeat.mid2 += interval;
       }
     } else {
-      if (this.nextTime.mid2 < ahead) this.nextTime.mid2 = now;
+      const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
+      if (this.nextBeat.mid2 < currentBeat) this.nextBeat.mid2 = currentBeat;
     }
 
-    // Pad
+    // Pad (same lookahead pattern as other instruments)
     if (this.instEnabled.pad) {
-      if (now >= this.padNextChordTime) {
-        this.playPadChord(this.padNextChordTime);
-        this.padNextChordTime += c.pad.chordInterval * 4 * beatDur;
+      while (this.beatToTime(this.padNextChordBeat) < ahead) {
+        this.playPadChord(this.beatToTime(this.padNextChordBeat));
+        this.padNextChordBeat += c.pad.chordInterval * 4;
       }
+    } else {
+      const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
+      if (this.padNextChordBeat < currentBeat) this.padNextChordBeat = currentBeat;
     }
   }
 
@@ -308,10 +410,16 @@ export class MusicEngine {
     const ctx = this.ctx!;
     const c = this.config.pling;
     const scale = SCALES[this.config.scale];
-    const midiLow = c.octaveLow * 12 + 12; // octave 4 = midi 60
+    const midiLow = c.octaveLow * 12 + 12;
     const midiHigh = c.octaveHigh * 12 + 12;
     const midi = pickNote(scale, midiLow, midiHigh);
     const freq = midiToFreq(midi);
+
+    // Automated values (ping-pong, each at slightly different phase rates)
+    const curFilter = this.pingPong(this.autoPhase, c.autoFilterMin, c.autoFilterMax);
+    const curDecay = this.pingPong(this.autoPhase * 0.7, c.autoDecayMin, c.autoDecayMax);
+    const curLfoSpeed = this.pingPong(this.autoPhase * 0.5, c.autoLfoSpeedMin, c.autoLfoSpeedMax);
+    const curLfoDepth = this.pingPong(this.autoPhase * 0.9, c.autoLfoDepthMin, c.autoLfoDepthMax);
 
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
@@ -319,22 +427,24 @@ export class MusicEngine {
 
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = c.filterCutoff;
+    filter.frequency.value = curFilter;
     filter.Q.value = c.filterQ;
 
     // LFO on filter cutoff
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = c.lfoSpeed;
+    lfo.frequency.value = curLfoSpeed;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = c.lfoDepth * c.filterCutoff * 0.75;
+    lfoGain.gain.value = curLfoDepth * curFilter * 0.75;
     lfo.connect(lfoGain);
     lfoGain.connect(filter.frequency);
     lfo.start(time);
 
-    const decay = Math.max(0.02, c.decay);
+    const decay = Math.max(0.02, curDecay);
     const noteDur = decay * 4 + 0.2;
-    const vol = c.volume * c.volume;
+    // Random volume within range
+    const rawVol = c.volumeMin + Math.random() * (c.volumeMax - c.volumeMin);
+    const vol = rawVol * rawVol;
     const env = ctx.createGain();
     env.gain.setValueAtTime(0, time);
     env.gain.linearRampToValueAtTime(vol, time + 0.01);
@@ -378,39 +488,72 @@ export class MusicEngine {
 
   // ─── Mid (FM synthesis) ───
 
-  private playMid(time: number, mc: { volume: number; sound: MidSound; delay: number; reverb: number }) {
+  private playMid(time: number, mc: MidConfig, autoPhase: number) {
     const ctx = this.ctx!;
     const preset = MID_PRESETS[mc.sound];
     const scale = SCALES[this.config.scale];
-    const midi = pickNote(scale, 48, 72);
+    const midiLow = mc.octaveLow * 12 + 12;
+    const midiHigh = mc.octaveHigh * 12 + 12;
+    const midi = pickNote(scale, midiLow, midiHigh);
     const freq = midiToFreq(midi);
+    const rawVol = mc.volumeMin + Math.random() * (mc.volumeMax - mc.volumeMin);
+    const vol = rawVol * rawVol;
 
-    // FM: modulator → modGain → carrier.frequency
-    const carrier = ctx.createOscillator();
-    carrier.type = 'sine';
-    carrier.frequency.value = freq;
+    // Automated values (ping-pong, each at slightly different phase rates)
+    const curFilter = this.pingPong(autoPhase, mc.autoFilterMin, mc.autoFilterMax);
+    const curDecay = this.pingPong(autoPhase * 0.7, mc.autoDecayMin, mc.autoDecayMax);
+    const curFm = this.pingPong(autoPhase * 0.5, mc.autoFmMin, mc.autoFmMax);
 
+    // Timing scaled by automated decay control
+    const a = preset.attack;
+    const d = preset.decay * curDecay;
+    const s = preset.sustain;
+    const r = preset.release * curDecay;
+    const modDecayTime = preset.modDecay * curDecay;
+    const noteDur = a + d * 3 + r * 2;
+
+    // Output filter (softens FM harmonics)
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = curFilter;
+    filter.Q.value = preset.filterQ;
+
+    // Amplitude envelope
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(vol, time + a);
+    env.gain.setTargetAtTime(vol * s, time + a, d);
+    env.gain.setTargetAtTime(0, time + a + d * 3, r * 0.5);
+
+    // Detuned carrier pair for stereo richness
+    const detuneAmount = preset.detuneCents * mc.detune;
+    const carriers: OscillatorNode[] = [];
+    for (const cents of [-detuneAmount, 0, detuneAmount]) {
+      const carrier = ctx.createOscillator();
+      carrier.type = 'sine';
+      carrier.frequency.value = freq;
+      carrier.detune.value = cents;
+      carrier.connect(filter);
+      carriers.push(carrier);
+    }
+    // Scale down for 3 carriers
+    const carrierGain = ctx.createGain();
+    carrierGain.gain.value = 0.4;
+    filter.connect(carrierGain);
+    carrierGain.connect(env);
+
+    // FM modulator with decaying index (sound becomes purer over time)
     const mod = ctx.createOscillator();
     mod.type = 'sine';
     mod.frequency.value = freq * preset.modRatio;
-
     const modGain = ctx.createGain();
-    modGain.gain.value = freq * preset.modIndex;
+    const modPeak = freq * preset.modIndex * curFm;
+    modGain.gain.setValueAtTime(modPeak, time);
+    modGain.gain.setTargetAtTime(modPeak * 0.1, time + a, modDecayTime);
     mod.connect(modGain);
-    modGain.connect(carrier.frequency);
+    for (const carrier of carriers) modGain.connect(carrier.frequency);
 
-    // Envelope
-    const env = ctx.createGain();
-    const a = preset.attack, d = preset.decay, s = preset.sustain, r = preset.release;
-    env.gain.setValueAtTime(0, time);
-    env.gain.linearRampToValueAtTime(mc.volume, time + a);
-    env.gain.setTargetAtTime(mc.volume * s, time + a, d);
-    const noteDur = a + d * 3 + r;
-    env.gain.setTargetAtTime(0, time + a + d * 3, r * 0.5);
-
-    carrier.connect(env);
-
-    // Optional noise layer (breathy)
+    // Optional noise layer
     if (preset.hasNoise) {
       if (!this.noiseBuffer) {
         const bufSize = ctx.sampleRate * 2;
@@ -423,10 +566,11 @@ export class MusicEngine {
       const nf = ctx.createBiquadFilter();
       nf.type = 'bandpass';
       nf.frequency.value = freq;
-      nf.Q.value = 5;
+      nf.Q.value = 3;
       const ng = ctx.createGain();
+      const nl = preset.noiseLevel ?? 0.1;
       ng.gain.setValueAtTime(0, time);
-      ng.gain.linearRampToValueAtTime(mc.volume * 0.15, time + a * 2);
+      ng.gain.linearRampToValueAtTime(vol * nl, time + a * 2);
       ng.gain.setTargetAtTime(0, time + a + d * 3, r * 0.5);
       noise.connect(nf);
       nf.connect(ng);
@@ -437,7 +581,7 @@ export class MusicEngine {
 
     // Routing
     const dry = ctx.createGain();
-    dry.gain.value = 1;
+    dry.gain.value = 1 - Math.max(mc.delay, mc.reverb) * 0.3;
     env.connect(dry);
     dry.connect(this.masterGain!);
 
@@ -455,15 +599,17 @@ export class MusicEngine {
       rs.connect(this.reverbConv);
     }
 
-    carrier.start(time);
-    mod.start(time);
     const stopTime = time + noteDur + 1;
-    carrier.stop(stopTime);
+    for (const carrier of carriers) { carrier.start(time); carrier.stop(stopTime); }
+    mod.start(time);
     mod.stop(stopTime);
 
-    // Visual reactions (mid = primary reactor, full strength)
-    this.addSwirl(1.0, midi, 48, 72);
-    this.addSizePulse(midi, 48, 72, 1.0);
+    this.addSwirl(1.0, midi, midiLow, midiHigh);
+    this.addSizePulse(midi, midiLow, midiHigh, 1.0);
+
+    // Trigger random dot growth (1-3 dots, strength based on note volume)
+    const dotCount = 1 + Math.floor(Math.random() * 3);
+    this.pendingNotePulses.push({ count: dotCount, strength: vol * 2 });
   }
 
   // ─── Pad (sustained drone) ───
@@ -472,16 +618,15 @@ export class MusicEngine {
     const ctx = this.ctx!;
     const c = this.config.pad;
     const scale = SCALES[this.config.scale];
-    const bassMidi = 36 + Math.floor(Math.random() * 12);
+    const midiLow = c.octaveLow * 12 + 12;
+    const midiHigh = c.octaveHigh * 12 + 12;
+    const bassMidi = midiLow + Math.floor(Math.random() * Math.max(1, midiHigh - midiLow - 12));
     const chord = pickChord(scale, bassMidi);
 
-    // Fade out old chord
     this.fadePadOut(4);
 
-    // Exponential volume curve: slider 0-1 maps to perceptually even loudness
-    // Divide by estimated osc count (3 notes * 3 detuned = 9) to tame stacking
     const oscCount = chord.length * 3;
-    const expVol = c.volume * c.volume * (0.5 / Math.max(1, oscCount));
+    const expVol = c.volume * c.volume / Math.sqrt(Math.max(1, oscCount));
 
     const oscs: OscillatorNode[] = [];
     const gains: GainNode[] = [];
@@ -499,14 +644,13 @@ export class MusicEngine {
 
     for (const midi of chord) {
       const freq = midiToFreq(midi);
-      // 3 detuned oscillators per note
       for (let d = -1; d <= 1; d++) {
         const osc = ctx.createOscillator();
         osc.type = 'sine';
-        osc.frequency.value = freq * Math.pow(2, (d * 5) / 1200); // ±5 cents
+        osc.frequency.value = freq * Math.pow(2, (d * c.detune) / 1200);
         const filter = ctx.createBiquadFilter();
         filter.type = 'lowpass';
-        filter.frequency.value = 800;
+        filter.frequency.value = c.filterCutoff;
         filter.Q.value = 0.5;
         osc.connect(filter);
         filter.connect(masterPadGain);
@@ -517,7 +661,6 @@ export class MusicEngine {
     gains.push(masterPadGain);
     this.padActiveChord = { oscs, gains };
 
-    // Gentle size pulse from pad (very subtle)
     this._sizePulse = Math.min(1, this._sizePulse + this.config.visualReactions.sizePulseStrength * 0.15);
   }
 
@@ -553,14 +696,18 @@ export class MusicEngine {
     const pitchNorm = 1 - (midi - midiLow) / Math.max(1, midiHigh - midiLow);
     const strength = vr.swirlStrength * strengthMult * (0.5 + pitchNorm * 0.5);
     const angle = Math.random() * Math.PI * 2;
+    // Randomize radius: use config swirlRadius as base, vary 0.3x-1.5x
+    const radiusVariation = 0.3 + Math.random() * 1.2;
+    const radius = vr.swirlRadius * radiusVariation;
     this.pendingSwirls.push({
       x: Math.random(),
       y: Math.random(),
       strength,
-      dx: Math.cos(angle) * 0.02,
-      dy: Math.sin(angle) * 0.02,
+      radius,
+      dx: Math.cos(angle) * 0.01,
+      dy: Math.sin(angle) * 0.01,
       age: 0,
-      maxAge: 0.3 + Math.random() * 0.2,
+      maxAge: 0.6 + Math.random() * 0.8,
     });
   }
 
@@ -569,7 +716,7 @@ export class MusicEngine {
     if (vr.sizePulseStrength < 0.01) return;
     const pitchNorm = 1 - (midi - midiLow) / Math.max(1, midiHigh - midiLow);
     const bassBias = 1 + pitchNorm * vr.bassSizeBoost * 2;
-    const pulse = vr.sizePulseStrength * mult * bassBias * 0.3;
+    const pulse = vr.sizePulseStrength * mult * bassBias * 0.15;
     this._sizePulse = Math.min(1, this._sizePulse + pulse);
   }
 }

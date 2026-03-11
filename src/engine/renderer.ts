@@ -33,7 +33,10 @@ export class CirclesRenderer {
   private targetSettings: Settings | null = null;
   private transitionStart: Settings | null = null;
   private transitionProgress = 0;
-  private readonly REF_SIZE = 1080; // reference viewport min dimension for scaling
+  private readonly REF_SIZE = 1080;
+  private _introMode = true;
+  private introTime = 0;
+  private introAngles: number[] = [];
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -268,6 +271,7 @@ export class CirclesRenderer {
         mediaGridX: 0, mediaGridY: 0,
         noiseOffsetX: Math.random() * 1000,
         noiseOffsetY: Math.random() * 1000,
+        notePulse: 0,
       });
     }
     this.assignGridPositions();
@@ -302,6 +306,7 @@ export class CirclesRenderer {
         mediaGridX: 0, mediaGridY: 0,
         noiseOffsetX: Math.random() * 1000,
         noiseOffsetY: Math.random() * 1000,
+        notePulse: 0,
       });
     }
     while (this.particles.length > target) {
@@ -420,6 +425,15 @@ export class CirclesRenderer {
     this.musicSizePulse = v;
   }
 
+  triggerNotePulse(count: number, strength: number) {
+    const len = this.particles.length;
+    if (len === 0) return;
+    for (let i = 0; i < count; i++) {
+      const idx = Math.floor(Math.random() * len);
+      this.particles[idx].notePulse = Math.min(1, this.particles[idx].notePulse + strength);
+    }
+  }
+
   triggerMedia() {
     this.media.triggerNext();
   }
@@ -441,10 +455,34 @@ export class CirclesRenderer {
   fadeIn() { this.fadeTarget = 1; }
   fadeOut() { this.fadeTarget = 0; }
   get isFadedOut() { return this.masterOpacity <= 0.001 && this.fadeTarget === 0; }
+  get introMode() { return this._introMode; }
 
   toggleFade() {
     if (this.fadeTarget > 0.5) this.fadeOut();
     else this.fadeIn();
+  }
+
+  exitIntro() {
+    this._introMode = false;
+  }
+
+  private setupIntroCircle() {
+    this.introAngles = [];
+    const count = this.particles.length;
+    for (let i = 0; i < count; i++) {
+      this.introAngles.push((i / count) * Math.PI * 2 + Math.random() * 0.3);
+    }
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = Math.min(w, h) * 0.3;
+    for (let i = 0; i < count; i++) {
+      const angle = this.introAngles[i];
+      this.particles[i].x = cx + Math.cos(angle) * radius;
+      this.particles[i].y = cy + Math.sin(angle) * radius;
+      this.particles[i].size = 0;
+    }
   }
 
   start() {
@@ -453,6 +491,7 @@ export class CirclesRenderer {
     this.prevW = window.innerWidth;
     this.prevH = window.innerHeight;
     this.initParticles();
+    this.setupIntroCircle();
     this.fadeIn();
     let last = performance.now();
     const loop = (now: number) => {
@@ -490,6 +529,40 @@ export class CirclesRenderer {
       this.masterOpacity = Math.min(this.fadeTarget, this.masterOpacity + fadeLerp);
     } else if (this.masterOpacity > this.fadeTarget) {
       this.masterOpacity = Math.max(this.fadeTarget, this.masterOpacity - fadeLerp);
+    }
+
+    // ===== INTRO MODE: circle formation =====
+    if (this._introMode) {
+      this.introTime += dt;
+      const cx = w / 2;
+      const cy = h / 2;
+      const radius = Math.min(w, h) * 0.3;
+      const effectiveMinSz = s.minSize * vs;
+      const effectiveMaxSz = s.maxSize * vs;
+      const avgSize = (effectiveMinSz + effectiveMaxSz) * 0.5;
+
+      for (let i = 0; i < this.particles.length; i++) {
+        const p = this.particles[i];
+        const baseAngle = this.introAngles[i] || 0;
+        const angle = baseAngle + this.introTime * 0.1;
+        const targetX = cx + Math.cos(angle) * radius;
+        const targetY = cy + Math.sin(angle) * radius;
+        p.x += (targetX - p.x) * Math.min(1, dt * 3);
+        p.y += (targetY - p.y) * Math.min(1, dt * 3);
+        const sizeOsc = 1 + Math.sin(this.introTime * 0.8 + baseAngle * 3) * 0.15;
+        const perParticleScale = 0.5 + (p.depth * 0.8) + Math.sin(baseAngle * 7.3) * 0.2;
+        p.targetSize = avgSize * sizeOsc * perParticleScale;
+        p.size += (p.targetSize - p.size) * Math.min(1, dt * 2);
+        const baseOpacity = s.opacityMin + p.depth * (s.opacityMax - s.opacityMin);
+        p.opacity = baseOpacity;
+        const hueShift = this.noise3D(p.noiseOffsetX + 200, 0, this.introTime * 0.2) * s.hueVariation;
+        p.color = `hsla(${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%, ${p.opacity * this.masterOpacity})`;
+        const blurThreshold = 1 - s.blurPercent;
+        p.blur = p.blurAmount >= blurThreshold
+          ? ((p.blurAmount - blurThreshold) / Math.max(0.001, s.blurPercent)) * s.depthOfField
+          : 0;
+      }
+      return;
     }
 
     // Audio with burst detection
@@ -551,11 +624,23 @@ export class CirclesRenderer {
               opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
               depth, gridX: 0, gridY: 0, mediaGridX: cx, mediaGridY: cy,
               noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
+              notePulse: 0,
             });
           }
           this.rebuildSortOrder();
         }
         this.assignMediaGridPositions();
+        // Fix dots-from-sides: snap off-screen particles to their grid position
+        // so they grow in place instead of traveling from edges
+        const margin = Math.min(w, h) * 0.15;
+        for (let i = 0; i < this.particles.length; i++) {
+          const p = this.particles[i];
+          if (p.x < -margin || p.x > w + margin || p.y < -margin || p.y > h + margin) {
+            p.x = p.mediaGridX;
+            p.y = p.mediaGridY;
+            p.size = 0;
+          }
+        }
       }
       // Smooth blend toward media intensity (no instant jumps)
       if (mediaActive) {
@@ -713,23 +798,29 @@ export class CirclesRenderer {
         if (Math.abs(p.vx) < 0.1 && Math.abs(p.vy) < 0.1) { p.vx = 0; p.vy = 0; }
       }
 
-      // ===== MUSIC SWIRL IMPULSES =====
+      // ===== MUSIC SWIRL IMPULSES (gentle, cursor-like) =====
       for (const imp of this.swirlImpulses) {
         const ix = imp.x * w;
         const iy = imp.y * h;
         const cdx = p.x - ix;
         const cdy = p.y - iy;
         const distSq = cdx * cdx + cdy * cdy;
-        const swirlRadius = Math.sqrt(w * w + h * h) * 0.12 * imp.strength;
+        const swirlRadius = Math.sqrt(w * w + h * h) * imp.radius;
         if (distSq < swirlRadius * swirlRadius && distSq > 1) {
           const dist = Math.sqrt(distSq);
           const proximity = 1 - dist / swirlRadius;
-          const fade = 1 - imp.age / imp.maxAge;
-          const force = proximity * proximity * fade * imp.strength * 2000 * vs * dt;
+          const proxSq = proximity * proximity;
+          // Smooth fade: ease out over lifetime (cubic)
+          const lifeFrac = imp.age / imp.maxAge;
+          const fade = (1 - lifeFrac) * (1 - lifeFrac);
+          // Radial push (like cursor repulsion but gentler)
           const nx = cdx / dist;
           const ny = cdy / dist;
-          p.vx += nx * force + imp.dx * w * fade * dt * 50;
-          p.vy += ny * force + imp.dy * h * fade * dt * 50;
+          p.vx += nx * proxSq * fade * imp.strength * 800 * vs * dt;
+          p.vy += ny * proxSq * fade * imp.strength * 800 * vs * dt;
+          // Gentle directional drift
+          p.vx += imp.dx * proxSq * fade * 200 * vs * dt;
+          p.vy += imp.dy * proxSq * fade * 200 * vs * dt;
         }
       }
 
@@ -771,11 +862,16 @@ export class CirclesRenderer {
       const effectiveMediaBlend = isExtra ? Math.min(1, mediaBlend * 2) : mediaBlend;
       const blendedSize = patternSize * (1 - effectiveMediaBlend) + mediaSize * effectiveMediaBlend;
 
+      // Per-particle note pulse (triggered by mid/plong/bong notes)
+      const noteMult = 1 + p.notePulse * 3.0;
+      p.notePulse *= Math.pow(0.04, dt); // smooth decay (~1.5s to fade)
+      if (p.notePulse < 0.005) p.notePulse = 0;
+
       // Music size pulse + audio burst
       const musicMult = 1 + this.musicSizePulse * 1.5 * (0.5 + p.depth * 0.5);
       const burstSizeMult = 1 + this.soundBurst * 2.0 * (0.5 + p.depth * 0.5);
-      p.targetSize = blendedSize * burstSizeMult * musicMult;
-      p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 1.5, p.targetSize));
+      p.targetSize = blendedSize * burstSizeMult * musicMult * noteMult;
+      p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 2.5, p.targetSize));
 
       // Edge vignette via size reduction (not opacity)
       const eFade = this.edgeSizeFade(p.x, p.y, w, h);
