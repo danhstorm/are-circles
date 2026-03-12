@@ -44,6 +44,9 @@ export class CirclesRenderer {
   private driftPhase = 0;
   private noisePhase = 0;
   private wavePhase = 0;
+  // Smooth particle count transitions: track start/target counts so particles grow/shrink
+  private transitionStartCount = 0;
+  private transitionTargetCount = 0;
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -155,9 +158,63 @@ export class CirclesRenderer {
   }
 
   transitionToSettings(s: Settings) {
+    // Clean up any pending particle count transition from a previous interrupted transition
+    if (this.transitionTargetCount > 0 && this.particles.length > this.transitionTargetCount) {
+      this.particles.length = this.transitionTargetCount;
+      this.rebuildSortOrder();
+    }
+    this.transitionTargetCount = 0;
+    this.transitionStartCount = 0;
+
     this.transitionStart = { ...this.settings };
     this.targetSettings = { ...s };
     this.transitionProgress = 0;
+
+    // Skip count management during media animations
+    if (this.baseParticleCount > 0) return;
+
+    // Compute target effective count
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    let targetCount: number;
+    if (s.useGrid) {
+      const cols = s.gridColumns;
+      const cellW = w / cols;
+      const rows = Math.ceil(h / cellW);
+      targetCount = cols * rows;
+    } else {
+      targetCount = s.circleCount;
+    }
+
+    const currentCount = this.particles.length;
+    this.transitionStartCount = currentCount;
+    this.transitionTargetCount = targetCount;
+
+    // If target needs more particles, add them now with size 0 (they'll grow in)
+    if (targetCount > currentCount) {
+      const margin = this.getMargin();
+      const hslPalette = s.paletteColors.map(c => this.hslToComponents(c));
+      while (this.particles.length < targetCount) {
+        const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
+        const depth = Math.random();
+        const x = -margin + Math.random() * (w + margin * 2);
+        const y = -margin + Math.random() * (h + margin * 2);
+        this.particles.push({
+          x, y, homeX: x, homeY: y, vx: 0, vy: 0,
+          baseSize: 0, size: 0, targetSize: 0, color: '', colorT: '',
+          hue: pal[0], saturation: pal[1], lightness: pal[2],
+          blur: 0, blurAmount: Math.random(),
+          opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
+          depth, gridX: 0, gridY: 0, mediaGridX: 0, mediaGridY: 0,
+          noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
+          notePulse: 0, mediaDelay: 0, preMediaX: 0, preMediaY: 0,
+          mediaSpeed: 0, mediaBlendProgress: 0, preMediaSize: 0,
+        });
+      }
+      this.assignGridPositions();
+      this.rebuildSortOrder();
+    }
+    // If target has fewer, particles beyond targetCount will shrink during transition
   }
 
   private applySettings(s: Settings, isTransitioning = false) {
@@ -258,9 +315,15 @@ export class CirclesRenderer {
     next.presetTransitionSpeed = b.presetTransitionSpeed;
 
     if (this.transitionProgress >= 1) {
+      // Trim particles that were shrinking to 0 during the transition
+      if (this.transitionTargetCount > 0 && this.particles.length > this.transitionTargetCount) {
+        this.particles.length = this.transitionTargetCount;
+        this.rebuildSortOrder();
+      }
+      this.transitionTargetCount = 0;
+      this.transitionStartCount = 0;
       // Transition complete: apply the actual target settings so useGrid,
       // circleCount, gridColumns etc. land on their true final values
-      // (the interpolated `next` has useGrid forced to true during blends).
       this.applySettings({ ...b });
       this.transitionStart = null;
       this.targetSettings = null;
@@ -1106,6 +1169,19 @@ export class CirclesRenderer {
       const burstSizeMult = 1 + this.soundBurst * 2.0 * (0.5 + p.depth * 0.5);
       p.targetSize = blendedSize * burstSizeMult * musicMult * noteMult;
       p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 2.5, p.targetSize));
+
+      // Smooth particle count transitions: shrink outgoing / grow incoming
+      if (this.transitionTargetCount > 0 && this.targetSettings) {
+        const tt2 = this.transitionProgress;
+        const easedCount = tt2 * tt2 * (3 - 2 * tt2);
+        if (this.transitionTargetCount < this.transitionStartCount && pi >= this.transitionTargetCount) {
+          // Outgoing particle: shrink to 0 over the transition
+          p.targetSize *= (1 - easedCount);
+        } else if (this.transitionTargetCount > this.transitionStartCount && pi >= this.transitionStartCount) {
+          // Incoming particle: grow from 0 over the transition
+          p.targetSize *= easedCount;
+        }
+      }
 
       // Size lerp speed
       const isGrowing = p.targetSize > p.size;

@@ -4,6 +4,7 @@
 
 - **Complete every requested task.** When the user gives a list of changes, track each one (use a todo list), implement each one, and check them off. Do not leave tasks undone. Before finishing, review the original request and confirm every point has been addressed.
 - **Do not skip verification.** Always run typecheck/build before declaring work complete.
+- **Always commit and push after every completed change.** Include `public/settings.json` in every commit. Do not wait to be asked.
 
 ## What This Is
 

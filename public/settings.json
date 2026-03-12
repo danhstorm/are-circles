@@ -1,5 +1,5 @@
 {
-  "version": "ksb21z",
+  "version": "rrao4y",
   "activePreset": 1,
   "scenes": [
     {
@@ -708,7 +708,7 @@
     "gridBlendIn": 1.6,
     "gridBlendOut": 1.5
   },
-  "soundMuted": false,
+  "soundMuted": true,
   "music": {
     "scale": "pentatonic-minor",
     "tempo": 61,
