@@ -103,6 +103,7 @@ export const defaultAppState: AppState = {
     hueVariation: 15,
   },
   mediaOverrides: {},
+  mediaOrder: [],
   hiddenMedia: [],
   mediaGridColumns: 40,
   transitionSpeed: 0.15,
@@ -188,8 +189,9 @@ export function loadAppState(): AppState {
         merged.customPresets = structuredClone(templatePresets);
       }
 
-      // Ensure hiddenMedia exists
+      // Ensure hiddenMedia and mediaOrder exist
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
+      if (!merged.mediaOrder) merged.mediaOrder = [];
 
       return merged;
     }
@@ -276,6 +278,7 @@ export async function syncWithServer(current: AppState): Promise<AppState> {
         merged.customPresets = structuredClone(templatePresets);
       }
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
+      if (!merged.mediaOrder) merged.mediaOrder = [];
       delete merged.livePresets;
       saveAppState(merged);
       return merged;
@@ -333,6 +336,7 @@ export function resetToServerDefaults(): Promise<AppState> {
         merged.customPresets = structuredClone(templatePresets);
       }
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
+      if (!merged.mediaOrder) merged.mediaOrder = [];
       delete merged.livePresets;
       saveAppState(merged);
       return merged;

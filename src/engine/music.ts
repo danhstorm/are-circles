@@ -140,7 +140,7 @@ export class MusicEngine {
   private beatOrigin = 0;
   private nextBeat = { pling: 0, mid1: 0, mid2: 0 };
   private padNextChordBeat = 0;
-  private padActiveChord: { oscs: OscillatorNode[]; gains: GainNode[] } | null = null;
+  private padActiveChord: { oscs: OscillatorNode[]; gains: GainNode[]; noteCount: number } | null = null;
 
   private noiseBuffer: AudioBuffer | null = null;
   private pendingSwirls: SwirlImpulse[] = [];
@@ -235,8 +235,7 @@ export class MusicEngine {
     // Pad: update active chord volume in real-time
     if (this.ctx && this.padActiveChord && c.pad.volume !== old.pad.volume) {
       const t = this.ctx.currentTime;
-      const oscCount = this.padActiveChord.oscs.length;
-      const expVol = c.pad.volume * c.pad.volume / Math.sqrt(Math.max(1, oscCount));
+      const expVol = c.pad.volume * c.pad.volume / Math.sqrt(Math.max(1, this.padActiveChord.noteCount));
       for (const g of this.padActiveChord.gains) {
         g.gain.cancelScheduledValues(t);
         g.gain.setTargetAtTime(expVol, t, 0.1);
@@ -250,6 +249,10 @@ export class MusicEngine {
           p.octaveLow !== op.octaveLow || p.octaveHigh !== op.octaveHigh ||
           c.scale !== old.scale) {
         this.playPadChord(this.ctx.currentTime + 0.05);
+        // Advance scheduler so it doesn't immediately fire another chord
+        const beatDur = 60 / c.tempo;
+        const currentBeat = (this.ctx.currentTime - this.beatOrigin) / beatDur;
+        this.padNextChordBeat = currentBeat + c.pad.chordInterval * 4;
       }
     }
   }
@@ -414,11 +417,16 @@ export class MusicEngine {
       if (this.nextBeat.mid2 < currentBeat) this.nextBeat.mid2 = currentBeat;
     }
 
-    // Pad (same lookahead pattern as other instruments)
+    // Pad: only schedule one chord at a time; skip past any missed beats
     if (this.instEnabled.pad) {
-      while (this.beatToTime(this.padNextChordBeat) < ahead) {
-        this.playPadChord(this.beatToTime(this.padNextChordBeat));
-        this.padNextChordBeat += c.pad.chordInterval * 4;
+      const interval = c.pad.chordInterval * 4;
+      if (this.beatToTime(this.padNextChordBeat) < ahead) {
+        // Skip ahead to the latest due beat (prevents chord stacking on catch-up)
+        while (this.beatToTime(this.padNextChordBeat + interval) < ahead) {
+          this.padNextChordBeat += interval;
+        }
+        this.playPadChord(Math.max(now, this.beatToTime(this.padNextChordBeat)));
+        this.padNextChordBeat += interval;
       }
     } else {
       const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
@@ -680,7 +688,7 @@ export class MusicEngine {
       oscs.push(osc, vib);
     }
     gains.push(masterPadGain);
-    this.padActiveChord = { oscs, gains };
+    this.padActiveChord = { oscs, gains, noteCount: chord.length };
 
     this._sizePulse = Math.min(1, this._sizePulse + this.config.visualReactions.sizePulseStrength * 0.15);
   }
@@ -698,13 +706,21 @@ export class MusicEngine {
     for (const o of oscs) {
       try { o.stop(stopTime); } catch { /* already stopped */ }
     }
+    // Disconnect nodes after fade to free audio graph resources
+    setTimeout(() => {
+      for (const o of oscs) { try { o.disconnect(); } catch { /* */ } }
+      for (const g of gains) { try { g.disconnect(); } catch { /* */ } }
+    }, (dur + 0.2) * 1000);
     this.padActiveChord = null;
   }
 
   private killPad() {
     if (!this.padActiveChord) return;
     for (const o of this.padActiveChord.oscs) {
-      try { o.stop(); } catch { /* already stopped */ }
+      try { o.stop(); o.disconnect(); } catch { /* already stopped */ }
+    }
+    for (const g of this.padActiveChord.gains) {
+      try { g.disconnect(); } catch { /* */ }
     }
     this.padActiveChord = null;
   }

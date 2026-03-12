@@ -1,0 +1,92 @@
+[
+  {
+    "src": "/media/4kq40epqpu_360.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/adobe-liquid-swirl.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/adobe-particles-burst.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/adobe-spiral.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/arm-movement.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/ballerina-dancing.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/bird-landing.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/black-hole.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/dna-chain.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/dust-scatter.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/glowing-liquid.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/gradient-grid.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/hand-gesture.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/scifi-character.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/sine-curtain.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  }
+]

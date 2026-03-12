@@ -59,11 +59,8 @@ export class CirclesRenderer {
     return Math.min(window.innerWidth, window.innerHeight) / this.REF_SIZE;
   }
 
-  private getSquarePad(): [number, number] {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const side = Math.max(w, h);
-    return [(side - w) / 2, (side - h) / 2];
+  private getMargin(): number {
+    return Math.min(window.innerWidth, window.innerHeight) * 0.15;
   }
 
   private edgeSizeFade(px: number, py: number, w: number, h: number): number {
@@ -77,23 +74,37 @@ export class CirclesRenderer {
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const isMobile = w < 768;
-    const dpr = Math.min(window.devicePixelRatio, isMobile ? 1.5 : 2);
+    const pixelCount = w * h;
+    // Scale DPR down for large viewports to maintain framerate
+    const baseDpr = window.devicePixelRatio;
+    const dpr = pixelCount > 2_000_000 ? Math.min(baseDpr, 1.5)
+              : pixelCount > 1_000_000 ? Math.min(baseDpr, 2)
+              : baseDpr;
     this.canvas.width = w * dpr;
     this.canvas.height = h * dpr;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // Remap home positions using square-relative coordinates
+    // Remap all positions proportionally to fill new viewport
     if (this.prevW > 0 && this.prevH > 0 && this.particles.length > 0) {
-      const oldSide = Math.max(this.prevW, this.prevH);
-      const newSide = Math.max(w, h);
-      const oldPadX = (oldSide - this.prevW) / 2;
-      const oldPadY = (oldSide - this.prevH) / 2;
-      const newPadX = (newSide - w) / 2;
-      const newPadY = (newSide - h) / 2;
+      const margin = this.getMargin();
+      const oldM = Math.min(this.prevW, this.prevH) * 0.15;
+      const oldSpanW = this.prevW + oldM * 2;
+      const oldSpanH = this.prevH + oldM * 2;
+      const newSpanW = w + margin * 2;
+      const newSpanH = h + margin * 2;
+      const sx = newSpanW / oldSpanW;
+      const sy = newSpanH / oldSpanH;
+      const oldLeft = -oldM;
+      const newLeft = -margin;
+      const oldTop = -oldM;
+      const newTop = -margin;
       for (const p of this.particles) {
-        p.homeX = ((p.homeX + oldPadX) / oldSide) * newSide - newPadX;
-        p.homeY = ((p.homeY + oldPadY) / oldSide) * newSide - newPadY;
+        p.homeX = (p.homeX - oldLeft) * sx + newLeft;
+        p.homeY = (p.homeY - oldTop) * sy + newTop;
+        p.x = (p.x - oldLeft) * sx + newLeft;
+        p.y = (p.y - oldTop) * sy + newTop;
+        p.preMediaX = (p.preMediaX - oldLeft) * sx + newLeft;
+        p.preMediaY = (p.preMediaY - oldTop) * sy + newTop;
       }
     }
     this.prevW = w;
@@ -149,9 +160,13 @@ export class CirclesRenderer {
     const oldCols = this.settings.gridColumns;
     const oldCount = this.settings.circleCount;
 
-    // During transitions, defer particle count changes to avoid jitter
+    // During transitions, defer particle count/column changes to avoid jitter
     if (isTransitioning) {
-      this.settings = { ...s, circleCount: oldCount, gridColumns: oldCols, useGrid: oldUseGrid };
+      this.settings = { ...s, circleCount: oldCount, gridColumns: oldCols };
+      // Keep grid positions updated when entering grid mode mid-transition
+      if (s.useGrid && !oldUseGrid) {
+        this.assignGridPositions();
+      }
       this.audio.setGain(s.micGain);
       return;
     }
@@ -163,7 +178,9 @@ export class CirclesRenderer {
       (s.useGrid && s.gridColumns !== oldCols) ||
       (!s.useGrid && s.circleCount !== oldCount);
 
-    if (oldUseGrid && !s.useGrid) {
+    // Only scatter if switching directly from grid to free (not after a smooth blend
+    // where floatGridBlend was already faded to 0 by lerpSettings)
+    if (oldUseGrid && !s.useGrid && s.floatGridBlend >= 0.5) {
       this.scatterParticles();
     }
 
@@ -198,6 +215,7 @@ export class CirclesRenderer {
       'imageIntervalMin', 'imageIntervalMax', 'imageFadeDuration', 'imageIntensity',
       'mediaGridColumns', 'hueVariation', 'opacityMin', 'opacityMax',
       'depthOfField', 'blurPercent', 'gravityStrength',
+      'gridMinSize', 'gridMaxSize', 'fadeDuration',
     ];
 
     for (const key of numericKeys) {
@@ -210,18 +228,28 @@ export class CirclesRenderer {
           : val;
     }
 
-    // Snap booleans and non-numeric values immediately
-    next.useGrid = b.useGrid;
+    // Smooth grid transition: blend floatGridBlend toward target
+    if (a.useGrid !== b.useGrid) {
+      const gridStart = a.useGrid ? Math.max(a.floatGridBlend, 0.001) : 0;
+      const gridTarget = b.useGrid ? Math.max(b.floatGridBlend, 0.001) : 0;
+      next.floatGridBlend = gridStart + (gridTarget - gridStart) * eased;
+      // Keep useGrid active while blend is still > 0 so grid positions are used
+      next.useGrid = next.floatGridBlend > 0.001;
+    }
+
+    // Snap non-numeric values
     next.mediaEnabled = b.mediaEnabled;
     next.mediaAutoGrid = b.mediaAutoGrid;
-    next.gravityShape = b.gravityShape;
+    next.gravityShape = eased > 0.5 ? b.gravityShape : a.gravityShape;
     next.backgroundColor = b.backgroundColor;
     next.paletteColors = b.paletteColors;
     next.presetTransitionSpeed = b.presetTransitionSpeed;
 
     if (this.transitionProgress >= 1) {
-      // Transition complete: apply final settings with full recount
-      this.applySettings(next);
+      // Transition complete: apply the actual target settings so useGrid,
+      // circleCount, gridColumns etc. land on their true final values
+      // (the interpolated `next` has useGrid forced to true during blends).
+      this.applySettings({ ...b });
       this.transitionStart = null;
       this.targetSettings = null;
     } else {
@@ -231,11 +259,12 @@ export class CirclesRenderer {
   }
 
   private scatterParticles() {
-    const side = Math.max(window.innerWidth, window.innerHeight);
-    const [padX, padY] = this.getSquarePad();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const m = this.getMargin();
     for (const p of this.particles) {
-      p.homeX = -padX + Math.random() * side;
-      p.homeY = -padY + Math.random() * side;
+      p.homeX = -m + Math.random() * (w + m * 2);
+      p.homeY = -m + Math.random() * (h + m * 2);
     }
   }
 
@@ -262,8 +291,9 @@ export class CirclesRenderer {
 
   private initParticles() {
     this.particles = [];
-    const side = Math.max(window.innerWidth, window.innerHeight);
-    const [padX, padY] = this.getSquarePad();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const m = this.getMargin();
     const count = this.getEffectiveCount();
     const { paletteColors } = this.settings;
     const hslPalette = paletteColors.map(c => this.hslToComponents(c));
@@ -271,15 +301,15 @@ export class CirclesRenderer {
     for (let i = 0; i < count; i++) {
       const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
       const depth = Math.random();
-      const x = -padX + Math.random() * side;
-      const y = -padY + Math.random() * side;
+      const x = -m + Math.random() * (w + m * 2);
+      const y = -m + Math.random() * (h + m * 2);
       this.particles.push({
         x, y,
         homeX: x,
         homeY: y,
         vx: 0, vy: 0,
         baseSize: 0, size: 0, targetSize: 0,
-        color: '',
+        color: '', colorT: '',
         hue: pal[0], saturation: pal[1], lightness: pal[2],
         blur: 0,
         blurAmount: Math.random(),
@@ -304,21 +334,22 @@ export class CirclesRenderer {
     if (this.baseParticleCount > 0) return;
 
     const target = this.getEffectiveCount();
-    const side = Math.max(window.innerWidth, window.innerHeight);
-    const [padX, padY] = this.getSquarePad();
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const m = this.getMargin();
     const hslPalette = this.settings.paletteColors.map(c => this.hslToComponents(c));
 
     while (this.particles.length < target) {
       const pal = hslPalette[Math.floor(Math.random() * hslPalette.length)];
       const depth = Math.random();
-      const x = -padX + Math.random() * side;
-      const y = -padY + Math.random() * side;
+      const x = -m + Math.random() * (w + m * 2);
+      const y = -m + Math.random() * (h + m * 2);
       this.particles.push({
         x, y,
         homeX: x, homeY: y,
         vx: 0, vy: 0,
         baseSize: 0, size: 0, targetSize: 0,
-        color: '',
+        color: '', colorT: '',
         hue: pal[0], saturation: pal[1], lightness: pal[2],
         blur: 0,
         blurAmount: Math.random(),
@@ -335,8 +366,16 @@ export class CirclesRenderer {
         mediaSpeed: 0,
       });
     }
-    while (this.particles.length > target) {
-      this.particles.pop();
+    if (this.particles.length > target) {
+      // Remove random particles instead of always popping from the end.
+      // Popping from end causes the same "original" particles to survive every
+      // cycle, accumulating positional drift bias toward center over time.
+      const removeCount = this.particles.length - target;
+      const indices = new Set<number>();
+      while (indices.size < removeCount) {
+        indices.add(Math.floor(Math.random() * this.particles.length));
+      }
+      this.particles = this.particles.filter((_, i) => !indices.has(i));
     }
     this.assignGridPositions();
   }
@@ -618,7 +657,7 @@ export class CirclesRenderer {
     const w = window.innerWidth;
     const h = window.innerHeight;
     const vs = this.getViewScale();
-    const [padX, padY] = this.getSquarePad();
+    const margin = this.getMargin();
     this.time += dt * s.animationSpeed * 0.5;
 
     // Master fade
@@ -657,7 +696,9 @@ export class CirclesRenderer {
         const baseOpacity = s.opacityMin + p.depth * (s.opacityMax - s.opacityMin);
         p.opacity = baseOpacity;
         const hueShift = this.noise3D(p.noiseOffsetX + 200, 0, this.introTime * 0.2) * s.hueVariation;
-        p.color = `hsla(${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%, ${p.opacity * this.masterOpacity})`;
+        const hsl = `${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%`;
+        p.color = `hsla(${hsl}, ${p.opacity * this.masterOpacity})`;
+        p.colorT = `hsla(${hsl}, 0)`;
         const blurThreshold = 1 - s.blurPercent;
         p.blur = p.blurAmount >= blurThreshold
           ? ((p.blurAmount - blurThreshold) / Math.max(0.001, s.blurPercent)) * s.depthOfField
@@ -728,7 +769,7 @@ export class CirclesRenderer {
             const depth = Math.random();
             this.particles.push({
               x: gx, y: gy, homeX: gx, homeY: gy, vx: 0, vy: 0,
-              baseSize: 0, size: 0, targetSize: 0, color: '',
+              baseSize: 0, size: 0, targetSize: 0, color: '', colorT: '',
               hue: pal[0], saturation: pal[1], lightness: pal[2],
               blur: 0, blurAmount: Math.random(),
               opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
@@ -847,20 +888,37 @@ export class CirclesRenderer {
       if (!p) continue;
 
       // ===== POSITION =====
-      if (s.useGrid) {
-        const looseness = 1 - s.floatGridBlend;
+      // floatGridBlend: 1 = locked to grid, 0 = free-floating
+      const gridBlend = s.useGrid ? s.floatGridBlend : 0;
+      if (gridBlend > 0.001) {
+        // Grid mode (full or partial blend)
+        const looseness = 1 - gridBlend;
         const jitterX = looseness > 0.01
           ? this.noise3D(p.noiseOffsetX + 300, p.noiseOffsetY + 300, this.time * s.driftSpeed) * 30 * vs * looseness
           : 0;
         const jitterY = looseness > 0.01
           ? this.noise3D(p.noiseOffsetX + 400, p.noiseOffsetY + 400, this.time * s.driftSpeed) * 30 * vs * looseness
           : 0;
-        const targetX = p.gridX + jitterX;
-        const targetY = p.gridY + jitterY;
-        p.x += (targetX - p.x) * Math.min(1, dt * 8);
-        p.y += (targetY - p.y) * Math.min(1, dt * 8);
-        p.homeX = p.x;
-        p.homeY = p.y;
+        const gridTargetX = p.gridX + jitterX;
+        const gridTargetY = p.gridY + jitterY;
+
+        // Also apply drift to homeX/homeY so particles have somewhere to go when grid releases
+        const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.time * s.driftSpeed);
+        const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.time * s.driftSpeed);
+        p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed * vs * looseness;
+        p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed * vs * looseness;
+
+        // Blend position between grid target and free home position
+        const targetX = gridTargetX * gridBlend + p.homeX * (1 - gridBlend);
+        const targetY = gridTargetY * gridBlend + p.homeY * (1 - gridBlend);
+        const lerpRate = dt * (8 * gridBlend + (0.6 + p.depth * 0.8) * (1 - gridBlend));
+        p.x += (targetX - p.x) * Math.min(1, lerpRate);
+        p.y += (targetY - p.y) * Math.min(1, lerpRate);
+        // Keep homeX/homeY close to current position so there's no jump when grid fully releases
+        if (gridBlend > 0.5) {
+          p.homeX = p.x;
+          p.homeY = p.y;
+        }
       } else {
         const isExtraP = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
         const inMediaTransition = this.mediaGridBlend > 0.001 && this.baseParticleCount > 0;
@@ -879,16 +937,16 @@ export class CirclesRenderer {
             p.homeY += by * fStr * h;
           }
 
-          const softMargin = 50 * vs;
-          const hardMargin = 200 * vs;
-          const sqLeft = -padX - softMargin;
-          const sqRight = w + padX + softMargin;
-          const sqTop = -padY - softMargin;
-          const sqBottom = h + padY + softMargin;
-          const hardLeft = -padX - hardMargin;
-          const hardRight = w + padX + hardMargin;
-          const hardTop = -padY - hardMargin;
-          const hardBottom = h + padY + hardMargin;
+          const softMargin = margin;
+          const hardMargin = margin + 150 * vs;
+          const sqLeft = -softMargin;
+          const sqRight = w + softMargin;
+          const sqTop = -softMargin;
+          const sqBottom = h + softMargin;
+          const hardLeft = -hardMargin;
+          const hardRight = w + hardMargin;
+          const hardTop = -hardMargin;
+          const hardBottom = h + hardMargin;
           if (p.homeX < hardLeft) p.homeX = sqLeft;
           else if (p.homeX > hardRight) p.homeX = sqRight;
           if (p.homeY < hardTop) p.homeY = sqTop;
@@ -1073,8 +1131,11 @@ export class CirclesRenderer {
       p.targetSize = blendedSize * burstSizeMult * musicMult * noteMult;
       p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 2.5, p.targetSize));
 
-      const eFade = this.edgeSizeFade(p.x, p.y, w, h);
-      p.targetSize *= eFade;
+      // Edge vignette only during media animation (to soften sharp video edges)
+      if (mediaBlend > 0.01) {
+        const eFade = this.edgeSizeFade(p.x, p.y, w, h);
+        p.targetSize *= 1 - mediaBlend + mediaBlend * eFade;
+      }
 
       // Size lerp: extras grow very slowly, shrink fast; regular particles moderate
       const isGrowing = p.targetSize > p.size;
@@ -1095,7 +1156,10 @@ export class CirclesRenderer {
 
       // ===== COLOR (no audio, only noise-based hue drift) =====
       const hueShift = this.noise3D(p.noiseOffsetX + 200, 0, this.time * 0.2) * s.hueVariation;
-      p.color = `hsla(${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%, ${p.opacity * this.masterOpacity})`;
+      const hsl = `${p.hue + hueShift}, ${p.saturation}%, ${p.lightness}%`;
+      const alpha = p.opacity * this.masterOpacity;
+      p.color = `hsla(${hsl}, ${alpha})`;
+      p.colorT = `hsla(${hsl}, 0)`;
 
       // ===== BLUR: only a percentage of particles get blur =====
       // blurAmount is 0-1 random per particle; only those above (1 - blurPercent) get blur
@@ -1116,23 +1180,27 @@ export class CirclesRenderer {
 
     if (this.masterOpacity <= 0.001) return;
 
+    const blurMin = this.settings.blurMin;
+    const blurRange = this.settings.blurMax - blurMin;
+
     for (const p of this.sortedParticles) {
       if (!p || p.size < 0.5) continue;
       const r = p.size;
+
+      // Skip particles fully outside viewport
+      if (p.x + r < 0 || p.x - r > w || p.y + r < 0 || p.y - r > h) continue;
 
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
 
       if (p.blur > 0.001) {
-        // Blurred circle: radial gradient for bokeh effect
-        const softness = this.settings.blurMin + p.blur * (this.settings.blurMax - this.settings.blurMin);
+        const softness = blurMin + p.blur * blurRange;
         const innerR = r * (1 - softness);
         const grad = ctx.createRadialGradient(p.x, p.y, Math.max(0, innerR), p.x, p.y, r);
         grad.addColorStop(0, p.color);
-        grad.addColorStop(1, p.color.replace(/[\d.]+\)$/, '0)'));
+        grad.addColorStop(1, p.colorT);
         ctx.fillStyle = grad;
       } else {
-        // Sharp circle: solid fill
         ctx.fillStyle = p.color;
       }
       ctx.fill();

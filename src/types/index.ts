@@ -9,6 +9,7 @@ export interface Particle {
   size: number;
   targetSize: number;
   color: string;
+  colorT: string;
   hue: number;
   saturation: number;
   lightness: number;
@@ -239,6 +240,7 @@ export interface AppState {
     hueVariation: number;
   };
   mediaOverrides: Record<string, MediaOverride>;
+  mediaOrder: string[];
   hiddenMedia: string[];
   mediaGridColumns: number;
   transitionSpeed: number;

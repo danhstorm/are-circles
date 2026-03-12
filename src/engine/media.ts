@@ -130,10 +130,7 @@ export class MediaEngine {
 
   private pickNext() {
     if (this.items.length === 0) return;
-    let idx = Math.floor(Math.random() * this.items.length);
-    if (this.items.length > 1 && idx === this.currentIndex) {
-      idx = (idx + 1) % this.items.length;
-    }
+    const idx = (this.currentIndex + 1) % this.items.length;
     this.currentIndex = idx;
     this.loadMedia(this.items[idx]);
   }
@@ -152,6 +149,7 @@ export class MediaEngine {
   }
 
   private loadMedia(item: MediaItem) {
+    if (!this.enabled) return;
     this.cleanupCurrent();
     this.currentItem = item;
     this.pingpongReverse = false;

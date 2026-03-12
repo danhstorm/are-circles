@@ -277,11 +277,17 @@ No test suite currently. Verify visually + build clean.
 
 ## Deployment
 
-Push to `main` triggers Vercel auto-deploy. To update default settings for all users:
-1. Adjust settings in SETUP mode
-2. POST current state to `/api/settings` (dev only) or manually edit `public/settings.json`
-3. Bump `version` field in settings.json
-4. Commit and push
+Push to `main` triggers Vercel auto-deploy.
+
+**CRITICAL: Always include `public/settings.json` in every commit and push.** This file is auto-updated by the dev server whenever settings change. It is the canonical source of truth for deployed clients. If it is not committed, Vercel will serve stale settings.
+
+```bash
+# Every commit MUST include settings.json:
+git add public/settings.json   # Always add this
+git add -A                     # Or add everything
+git commit -m "..."
+git push
+```
 
 ## Recent Bug Fixes (for context)
 

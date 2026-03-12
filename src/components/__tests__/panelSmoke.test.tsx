@@ -48,6 +48,7 @@ describe('panel smoke tests', () => {
         soundMuted={false}
         onToggleSound={noop}
         onActiveTemplateChange={noop}
+        onReorderMedia={noop}
       />,
     );
 
@@ -80,10 +81,11 @@ describe('panel smoke tests', () => {
         soundMuted={false}
         onToggleSound={noop}
         onActiveTemplateChange={noop}
+        onReorderMedia={noop}
       />,
     );
 
     expect(screen.getByRole('button', { name: /close/i })).toBeInTheDocument();
-    expect(screen.getByText('Calm')).toBeInTheDocument();
+    expect(screen.getByText('Presentation')).toBeInTheDocument();
   });
 });

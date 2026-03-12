@@ -27,13 +27,31 @@ export default function CirclesCanvas() {
   const [soundMuted, setSoundMuted] = useState(() => defaultAppState.soundMuted);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const serverSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTemplateIdx = useRef(0);
+  const isDev = process.env.NODE_ENV === 'development';
 
   const autoSave = useCallback((state: AppState) => {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => saveAppState(state), 200);
-  }, []);
+    // In dev, also persist to settings.json so it's always in sync for commits
+    if (isDev) {
+      clearTimeout(serverSaveTimer.current);
+      serverSaveTimer.current = setTimeout(() => {
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(state),
+        }).then(r => r.json()).then(({ version }) => {
+          if (version) {
+            appStateRef.current = { ...appStateRef.current, version };
+            saveAppState(appStateRef.current);
+          }
+        }).catch(() => {});
+      }, 2000);
+    }
+  }, [isDev]);
 
   const appStateRef = useRef(appState);
   const soundMutedRef = useRef(soundMuted);
@@ -62,6 +80,10 @@ export default function CirclesCanvas() {
       const currentScene = currentState.scenes[currentState.activePreset];
       if (!currentScene.presetTemplates || currentScene.presetTemplates.length < 2) return;
 
+      // Reset index if out of bounds (presets may have been toggled off)
+      if (cycleTemplateIdx.current >= currentScene.presetTemplates.length) {
+        cycleTemplateIdx.current = 0;
+      }
       cycleTemplateIdx.current = (cycleTemplateIdx.current + 1) % currentScene.presetTemplates.length;
       const templateIdx = currentScene.presetTemplates[cycleTemplateIdx.current];
       const presets = currentState.customPresets || templatePresets;
@@ -117,26 +139,23 @@ export default function CirclesCanvas() {
     // Start preset cycling if applicable
     startPresetCycling(next);
 
-    // Music: enable/disable per scene
+    // Music: always sync instruments to current scene, then start/stop as needed
     const music = musicRef.current;
-    if (music && !soundMutedRef.current) {
-      if (scene.soundEnabled) {
-        const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-        if (anyEnabled) {
-          if (!music.isPlaying) await music.start();
-          else music.fadeIn(2);
-          music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
-          music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
-          music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
-          music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
-        } else {
-          music.fadeOut(2);
-        }
-      } else {
+    if (music) {
+      music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
+      music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
+      music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
+      music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+
+      const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
+      const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
+
+      if (shouldPlay) {
+        if (!music.isPlaying) await music.start();
+        else music.fadeIn(2);
+      } else if (music.isPlaying) {
         music.fadeOut(2);
       }
-    } else if (music) {
-      music.fadeOut(0.5);
     }
   }, [autoSave, startPresetCycling]);
 
@@ -171,25 +190,29 @@ export default function CirclesCanvas() {
       const music = musicRef.current;
       if (music) {
         music.updateConfig(next.music);
+        const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
+        const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
+
         music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
         music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
         music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
         music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
-        if (!soundMutedRef.current && scene.soundEnabled) {
-          const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-          if (anyEnabled && !music.isPlaying) {
-            music.start();
-          } else if (anyEnabled && music.isPlaying) {
-            music.fadeIn(0.5);
-          } else if (!anyEnabled && music.isPlaying) {
-            music.fadeOut(2);
-          }
+
+        if (shouldPlay && !music.isPlaying) {
+          music.start();
+        } else if (shouldPlay && music.isPlaying) {
+          music.fadeIn(0.5);
+        } else if (!shouldPlay && music.isPlaying) {
+          music.fadeOut(2);
         }
       }
 
+      // Restart cycling in case presetTemplates changed
+      startPresetCycling(next);
+
       return next;
     });
-  }, [autoSave]);
+  }, [autoSave, startPresetCycling]);
 
   const toggleAudio = useCallback(async () => {
     const r = rendererRef.current;
@@ -213,19 +236,18 @@ export default function CirclesCanvas() {
       } else {
         const state = appStateRef.current;
         const scene = state.scenes[state.activePreset];
-        if (scene.soundEnabled) {
-          const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-          if (anyEnabled) {
-            if (!music.isPlaying) {
-              music.start(2).then(() => {
-                music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
-                music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
-                music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
-                music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
-              });
-            } else {
-              music.fadeIn(2);
-            }
+        // Always sync instruments to current scene when unmuting
+        music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
+        music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
+        music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
+        music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+
+        const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
+        if (scene.soundEnabled && anyEnabled) {
+          if (!music.isPlaying) {
+            music.start(2);
+          } else {
+            music.fadeIn(2);
           }
         }
       }
@@ -247,10 +269,9 @@ export default function CirclesCanvas() {
     if (renderer.introMode) {
       renderer.exitIntro();
       setInIntro(false);
-      // Start music if scene 1 has sound enabled
       const state = appStateRef.current;
       const scene = state.scenes[state.activePreset];
-      if (music && scene.soundEnabled) {
+      if (music && !soundMutedRef.current && scene.soundEnabled) {
         const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
         if (anyEnabled) {
           music.start(3).then(() => {
@@ -261,7 +282,6 @@ export default function CirclesCanvas() {
           });
         }
       }
-      // Start cycling if applicable
       startPresetCycling(state);
     }
   }, [startPresetCycling]);
@@ -323,7 +343,18 @@ export default function CirclesCanvas() {
 
     // Pump music reactions into renderer
     const musicPump = setInterval(() => {
-      if (!music.isPlaying) return;
+      const currentState = appStateRef.current;
+      const scene = currentState.scenes[currentState.activePreset];
+      const soundActive = !soundMutedRef.current && scene.soundEnabled
+        && Object.values(scene.musicInstruments).some(v => v);
+
+      if (!music.isPlaying || !soundActive) {
+        // Drain queues so stale impulses don't build up
+        music.getSwirlImpulses();
+        music.getNotePulses();
+        renderer.setMusicSizePulse(0);
+        return;
+      }
       const swirls = music.getSwirlImpulses();
       if (swirls.length > 0) renderer.addSwirlImpulses(swirls);
       renderer.setMusicSizePulse(music.getSizePulse());
@@ -331,23 +362,37 @@ export default function CirclesCanvas() {
       for (const np of notePulses) renderer.triggerNotePulse(np.count, np.strength);
     }, 16);
 
-    // Load media (filter hidden)
-    fetch('/api/media', { cache: 'no-store' })
+    // Load media from static manifest (works on Vercel + local)
+    fetch('/media-manifest.json', { cache: 'no-store' })
       .then(r => r.json())
       .then((items: MediaItem[]) => {
         const hidden = state.hiddenMedia || [];
+        const order = state.mediaOrder || [];
         const merged = items
           .filter((item: MediaItem) => !hidden.includes(item.src))
           .map((item: MediaItem) => {
             const ov = getMediaOverride(state, item.src);
             return { ...item, playMode: ov.playMode, invert: ov.invert };
           });
+        // Sort by saved order; items not in order go to the end
+        merged.sort((a, b) => {
+          const ai = order.indexOf(a.src);
+          const bi = order.indexOf(b.src);
+          if (ai === -1 && bi === -1) return 0;
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
+        });
         renderer.media.setItems(merged);
         setMediaItems(merged);
       })
       .catch(() => {});
 
-    const handleResize = () => renderer.resize();
+    let resizeTimer: ReturnType<typeof setTimeout>;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => renderer.resize(), 100);
+    };
     window.addEventListener('resize', handleResize);
 
     const mediaIndexPoll = setInterval(() => {
@@ -499,22 +544,33 @@ export default function CirclesCanvas() {
         activeMediaIndex={activeMediaIndex}
         soundMuted={soundMuted}
         onToggleSound={toggleSoundMute}
-        onActiveTemplateChange={(idx) => { activeTemplateRef.current = idx; }}
+        onActiveTemplateChange={(idx) => {
+          activeTemplateRef.current = idx;
+          // Push the new template's settings to the renderer immediately
+          const state = appStateRef.current;
+          const scene = state.scenes[state.activePreset];
+          const presets = state.customPresets || templatePresets;
+          const template = idx != null ? presets[idx] : null;
+          const merged = template
+            ? { ...scene, settings: { ...defaultSettings, ...template.settings } }
+            : scene;
+          const settings = buildRendererSettings(merged, state);
+          rendererRef.current?.transitionToSettings(settings);
+        }}
+        onReorderMedia={(fromIdx, toIdx) => {
+          const updated = [...mediaItems];
+          const [moved] = updated.splice(fromIdx, 1);
+          updated.splice(toIdx, 0, moved);
+          setMediaItems(updated);
+          rendererRef.current?.media.setItems(updated);
+          updateAppState(prev => ({
+            ...prev,
+            mediaOrder: updated.map(m => m.src),
+          }));
+        }}
       />
 
-      {/* Settings button (only when panel hidden and not in intro) */}
-      {!panelVisible && !inIntro && (
-        <button
-          onClick={() => setPanelVisible(true)}
-          className="fixed top-4 right-4 z-40 w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-white/15 sm:bg-white/10 hover:bg-white/20 flex items-center justify-center transition-opacity sm:opacity-0 sm:hover:opacity-100 cursor-pointer"
-          title="Settings (H)"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" />
-          </svg>
-        </button>
-      )}
+      {/* Panel toggled via 'H' key only -- no visible button for live presentation */}
     </>
   );
 }

@@ -1,9 +1,9 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Settings, AppState, MediaItem, GravityShape } from '@/types';
 import { templatePresets } from '@/lib/presets';
-import { getMediaOverride } from '@/lib/settings';
+import { getMediaOverride, resetToServerDefaults, saveAppState } from '@/lib/settings';
 import DirectionPicker from './DirectionPicker';
 
 interface Props {
@@ -27,6 +27,7 @@ interface Props {
   soundMuted: boolean;
   onToggleSound: () => void;
   onActiveTemplateChange: (idx: number | null) => void;
+  onReorderMedia: (fromIdx: number, toIdx: number) => void;
 }
 
 function Slider({ label, value, min, max, step, onChange }: {
@@ -191,7 +192,7 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
               aria-label="Close">&times;</button>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {appState.scenes.map((s, i) => (
+            {(['Presentation', 'Background', 'Mood'] as const).map((label, i) => (
               <button key={i} onClick={() => onApplyPreset(i)}
                 className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all cursor-pointer ${
                   appState.activePreset === i
@@ -199,7 +200,7 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
                     : 'bg-white/5 hover:bg-white/10 text-white/40 border border-transparent'
                 }`}>
                 {sceneIcons[i] || sceneIcons[0]}
-                <span className="text-[11px] leading-none">{s.name}</span>
+                <span className="text-[11px] leading-none">{label}</span>
               </button>
             ))}
           </div>
@@ -222,15 +223,15 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
   );
 }
 
-export default function SetupPanel({ visible, mode, onSetMode, onClose, appState, editingPreset, onSetEditingPreset, onUpdate, onApplyPreset, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, soundMuted, onToggleSound, onActiveTemplateChange }: Props) {
+export default function SetupPanel({ visible, mode, onSetMode, onClose, appState, editingPreset, onSetEditingPreset, onUpdate, onApplyPreset, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, soundMuted, onToggleSound, onActiveTemplateChange, onReorderMedia }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [colorsOpen, setColorsOpen] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<number | null>(() => {
+  const [selectedTemplate, setSelectedTemplate] = useState<number>(() => {
     const scene = appState.scenes[editingPreset];
     const templates = scene?.presetTemplates;
-    return templates && templates.length > 0 ? templates[0] : null;
+    return templates && templates.length > 0 ? templates[0] : 0;
   });
 
   void onTriggerMedia;
@@ -241,68 +242,36 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
   useEffect(() => {
     const scene = appState.scenes[editingPreset];
     const templates = scene?.presetTemplates;
-    const next = templates && templates.length > 0 ? templates[0] : null;
+    const next = templates && templates.length > 0 ? templates[0] : 0;
     setSelectedTemplate(next);
     onActiveTemplateChange(next);
   }, [editingPreset]); // Only reset when switching scenes, not on every slider change
 
   const preset = appState.scenes[editingPreset];
   const customPresets = appState.customPresets || templatePresets;
-  // When a template preset is selected, sliders read/write from that preset
-  const ps = selectedTemplate !== null
-    ? (customPresets[selectedTemplate]?.settings ?? preset.settings)
-    : preset.settings;
+  // Sliders always read/write from the selected template preset
+  const ps = customPresets[selectedTemplate]?.settings ?? preset.settings;
 
   const setPresetSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    if (selectedTemplate !== null) {
-      onUpdate(prev => {
-        const cp = [...(prev.customPresets || templatePresets)];
-        cp[selectedTemplate] = { ...cp[selectedTemplate], settings: { ...cp[selectedTemplate].settings, [key]: value } };
-        return { ...prev, customPresets: cp };
-      });
-    } else {
-      onUpdate(prev => {
-        const scenes = [...prev.scenes] as AppState['scenes'];
-        scenes[editingPreset] = {
-          ...scenes[editingPreset],
-          settings: { ...scenes[editingPreset].settings, [key]: value },
-        };
-        return { ...prev, scenes };
-      });
-    }
+    onUpdate(prev => {
+      const cp = [...(prev.customPresets || templatePresets)];
+      cp[selectedTemplate] = { ...cp[selectedTemplate], settings: { ...cp[selectedTemplate].settings, [key]: value } };
+      return { ...prev, customPresets: cp };
+    });
   };
 
   const setPresetSettings = (partial: Partial<Settings>) => {
-    if (selectedTemplate !== null) {
-      onUpdate(prev => {
-        const cp = [...(prev.customPresets || templatePresets)];
-        cp[selectedTemplate] = { ...cp[selectedTemplate], settings: { ...cp[selectedTemplate].settings, ...partial } };
-        return { ...prev, customPresets: cp };
-      });
-    } else {
-      onUpdate(prev => {
-        const scenes = [...prev.scenes] as AppState['scenes'];
-        scenes[editingPreset] = {
-          ...scenes[editingPreset],
-          settings: { ...scenes[editingPreset].settings, ...partial },
-        };
-        return { ...prev, scenes };
-      });
-    }
+    onUpdate(prev => {
+      const cp = [...(prev.customPresets || templatePresets)];
+      cp[selectedTemplate] = { ...cp[selectedTemplate], settings: { ...cp[selectedTemplate].settings, ...partial } };
+      return { ...prev, customPresets: cp };
+    });
   };
 
   const setPresetMedia = (enabled: boolean) => {
     onUpdate(prev => {
       const scenes = [...prev.scenes] as AppState['scenes'];
       scenes[editingPreset] = { ...scenes[editingPreset], mediaEnabled: enabled };
-      return { ...prev, scenes };
-    });
-  };
-
-  const setPresetName = (name: string) => {
-    onUpdate(prev => {
-      const scenes = [...prev.scenes] as AppState['scenes'];
-      scenes[editingPreset] = { ...scenes[editingPreset], name };
       return { ...prev, scenes };
     });
   };
@@ -342,6 +311,58 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
       scenes[editingPreset] = { ...scenes[editingPreset], cycleIntervalMin: lo, cycleIntervalMax: hi };
       return { ...prev, scenes };
     });
+  };
+
+  const setSceneProp = <K extends keyof AppState['scenes'][0]>(key: K, value: AppState['scenes'][0][K]) => {
+    onUpdate(prev => {
+      const scenes = [...prev.scenes] as AppState['scenes'];
+      scenes[editingPreset] = { ...scenes[editingPreset], [key]: value };
+      return { ...prev, scenes };
+    });
+  };
+
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [mediaDragIdx, setMediaDragIdx] = useState<number | null>(null);
+  const [mediaDragOverIdx, setMediaDragOverIdx] = useState<number | null>(null);
+
+  const reorderPresetTemplates = useCallback((fromPos: number, toPos: number) => {
+    onUpdate(prev => {
+      const scenes = [...prev.scenes] as AppState['scenes'];
+      const templates = [...(scenes[editingPreset].presetTemplates || [])];
+      const [moved] = templates.splice(fromPos, 1);
+      templates.splice(toPos, 0, moved);
+      scenes[editingPreset] = { ...scenes[editingPreset], presetTemplates: templates };
+      return { ...prev, scenes };
+    });
+  }, [editingPreset, onUpdate]);
+
+  const handleSaveAsDefaults = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(appState),
+      });
+      if (res.ok) {
+        const { version } = await res.json();
+        onUpdate(prev => ({ ...prev, version }));
+      }
+    } catch { /* ignore */ }
+    setSaving(false);
+  };
+
+  const handleResetToDefaults = async () => {
+    setResetting(true);
+    try {
+      const state = await resetToServerDefaults();
+      onUpdate(() => state);
+      saveAppState(state);
+    } catch { /* ignore */ }
+    setResetting(false);
   };
 
   const setMediaOverrideProp = (src: string, prop: string, value: number) => {
@@ -398,9 +419,26 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
             </div>
           </div>
 
+          <div className="flex gap-1.5">
+            <button
+              onClick={handleResetToDefaults}
+              disabled={resetting}
+              className="flex-1 py-1 text-[10px] rounded bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
+            >
+              {resetting ? 'Resetting...' : 'Reset to Defaults'}
+            </button>
+            <button
+              onClick={handleSaveAsDefaults}
+              disabled={saving}
+              className="flex-1 py-1 text-[10px] rounded bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
+            >
+              {saving ? 'Saving...' : 'Save as Defaults'}
+            </button>
+          </div>
+
           <Section title="Editing Preset">
             <div className="grid grid-cols-3 gap-1">
-              {appState.scenes.map((p, i) => (
+              {(['1 Presentation', '2 Background', '3 Mood'] as const).map((label, i) => (
                 <button
                   key={i}
                   onClick={() => onSetEditingPreset(i)}
@@ -408,20 +446,15 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                     editingPreset === i ? 'bg-white/18 text-white border border-white/25' : 'bg-white/6 hover:bg-white/12 text-white/60'
                   }`}
                 >
-                  <span className="text-white/30 mr-0.5">{i + 1}</span> {p.name}
+                  {label}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-[10px] text-white/35 shrink-0">Name</span>
-              <input
-                type="text"
-                value={preset.name}
-                onChange={e => setPresetName(e.target.value)}
-                className="flex-1 text-[11px] px-2 py-1 rounded bg-white/8 text-white/80 border border-white/10 outline-none min-w-0"
-              />
-            </div>
             <Slider label="Transition Speed" value={appState.transitionSpeed} min={0.02} max={1} step={0.02} onChange={v => setGlobal('transitionSpeed', v)} />
+            <label className="flex items-center gap-2 cursor-pointer py-0.5">
+              <input type="checkbox" checked={preset.soundEnabled ?? false} onChange={e => setSceneProp('soundEnabled', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
+              <span className="text-[11px] text-white/55">Sound Enabled</span>
+            </label>
           </Section>
 
           <Section title="Presets">
@@ -438,7 +471,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                       className="accent-white/60 w-3 h-3 shrink-0 cursor-pointer"
                     />
                     <button
-                      onClick={() => { const next = editing ? null : i; setSelectedTemplate(next); onActiveTemplateChange(next); }}
+                      onClick={() => { setSelectedTemplate(i); onActiveTemplateChange(i); }}
                       className={`flex-1 text-left text-[10px] truncate cursor-pointer transition-colors ${
                         editing ? 'text-white font-medium' : enabled ? 'text-white/70' : 'text-white/35 hover:text-white/55'
                       }`}
@@ -452,8 +485,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                 );
               })}
             </div>
-            {selectedTemplate !== null && (
-              <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1">
                 <span className="text-[10px] text-white/35 shrink-0">Preset Name</span>
                 <input
                   type="text"
@@ -481,20 +513,62 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                 >
                   Reset
                 </button>
-              </div>
-            )}
+            </div>
             {(preset.presetTemplates || []).length >= 2 && (
-              <RangeSlider label="Interval (s)" low={preset.cycleIntervalMin || 30} high={preset.cycleIntervalMax || 60} min={10} max={180} step={5} onChange={(lo, hi) => setCycleInterval(lo, hi)} />
+              <>
+                <RangeSlider label="Interval (s)" low={preset.cycleIntervalMin || 30} high={preset.cycleIntervalMax || 60} min={10} max={180} step={5} onChange={(lo, hi) => setCycleInterval(lo, hi)} />
+                <div className="flex flex-col gap-0.5 pt-1 border-t border-white/8">
+                  <span className="text-[9px] uppercase tracking-widest text-white/25 pb-0.5">Playback Order</span>
+                  {(preset.presetTemplates || []).map((tIdx, pos) => (
+                    <div
+                      key={`${tIdx}-${pos}`}
+                      draggable
+                      onDragStart={(e) => {
+                        setDragIdx(pos);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setDragOverIdx(pos);
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverIdx === pos) setDragOverIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (dragIdx !== null && dragIdx !== pos) {
+                          reorderPresetTemplates(dragIdx, pos);
+                        }
+                        setDragIdx(null);
+                        setDragOverIdx(null);
+                      }}
+                      onDragEnd={() => {
+                        setDragIdx(null);
+                        setDragOverIdx(null);
+                      }}
+                      className={`flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] cursor-grab active:cursor-grabbing transition-colors ${
+                        dragOverIdx === pos && dragIdx !== pos
+                          ? 'bg-white/15 border border-white/25'
+                          : dragIdx === pos
+                            ? 'opacity-40 bg-white/5'
+                            : 'bg-white/5 hover:bg-white/8'
+                      }`}
+                    >
+                      <span className="text-white/20 text-[10px] shrink-0 select-none">⠿</span>
+                      <span className="text-white/15 text-[9px] tabular-nums w-3 shrink-0">{pos + 1}</span>
+                      <span className="text-white/60 truncate">{customPresets[tIdx]?.name ?? `Preset ${tIdx}`}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
             {(preset.presetTemplates || []).length < 2 && (preset.presetTemplates || []).length > 0 && (
               <span className="text-[10px] text-white/25 italic">Enable 2+ presets to cycle</span>
             )}
-            {selectedTemplate !== null && (
-              <div className="text-[10px] text-white/40 pt-1 border-t border-white/8">
-                Sliders below edit <span className="text-white/70">{customPresets[selectedTemplate]?.name}</span> preset.
-                <button onClick={() => { setSelectedTemplate(null); onActiveTemplateChange(null); }} className="ml-2 text-white/50 hover:text-white/80 underline cursor-pointer">Back to scene</button>
-              </div>
-            )}
+            <div className="text-[10px] text-white/40 pt-1 border-t border-white/8">
+              Editing <span className="text-white/70">{customPresets[selectedTemplate]?.name}</span> preset
+            </div>
           </Section>
 
           <div className="grid grid-cols-2 gap-2">
@@ -522,6 +596,9 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
               )}
               <Slider label="Speed" value={ps.animationSpeed ?? 0.5} min={0.05} max={2} step={0.05} onChange={v => setPresetSetting('animationSpeed', v)} />
               <RangeSlider label="Size" low={ps.minSize ?? 4} high={ps.maxSize ?? 80} min={1} max={300} step={1} onChange={(lo, hi) => setPresetSettings({ minSize: lo, maxSize: hi })} />
+              {ps.useGrid && (
+                <Slider label="Grid Size" value={ps.gridMaxSize ?? 30} min={0} max={100} step={1} onChange={v => setPresetSettings({ gridMinSize: 0, gridMaxSize: v })} />
+              )}
               <RangeSlider label="Opacity" low={ps.opacityMin ?? 0.3} high={ps.opacityMax ?? 0.9} min={0.05} max={1} step={0.05} onChange={(lo, hi) => setPresetSettings({ opacityMin: lo, opacityMax: hi })} />
             </Section>
             <Section title="Depth & Blur">
@@ -585,7 +662,37 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                   const name = (item.src.split('/').pop() || '').replace(/\.[^.]+$/, '');
                   const ov = getMediaOverride(appState, item.src);
                   return (
-                    <div key={item.src} className="relative group flex flex-col gap-1">
+                    <div
+                      key={item.src}
+                      className={`relative group flex flex-col gap-1 transition-opacity ${
+                        mediaDragIdx === i ? 'opacity-40' : ''
+                      } ${mediaDragOverIdx === i && mediaDragIdx !== i ? 'ring-1 ring-white/30 rounded' : ''}`}
+                      draggable
+                      onDragStart={(e) => {
+                        setMediaDragIdx(i);
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                        setMediaDragOverIdx(i);
+                      }}
+                      onDragLeave={() => {
+                        if (mediaDragOverIdx === i) setMediaDragOverIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (mediaDragIdx !== null && mediaDragIdx !== i) {
+                          onReorderMedia(mediaDragIdx, i);
+                        }
+                        setMediaDragIdx(null);
+                        setMediaDragOverIdx(null);
+                      }}
+                      onDragEnd={() => {
+                        setMediaDragIdx(null);
+                        setMediaDragOverIdx(null);
+                      }}
+                    >
                       <button
                         onClick={() => onTriggerMediaByIndex(i)}
                         className={`w-full aspect-square rounded overflow-hidden bg-black/30 border transition-colors cursor-pointer ${
@@ -598,10 +705,11 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                           src={item.src.replace(/\.[^.]+$/, '.jpg').replace('/media/', '/media/thumbs/')}
                           alt={name}
                           loading="lazy"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover pointer-events-none"
                           style={{ filter: `grayscale(1) brightness(${1 + (ov.intensity - 0.7)}) contrast(${1 + (ov.contrast ?? 0) * 3})${item.invert ? ' invert(1)' : ''}` }}
                         />
                       </button>
+                      <span className="absolute top-0.5 left-0.5 text-[8px] text-white/30 bg-black/40 rounded px-0.5 leading-tight select-none">{i + 1}</span>
                       {confirmDelete === i ? (
                         <button onClick={() => { setConfirmDelete(null); clearTimeout(confirmTimer.current); onRemoveMedia(i); }} className="absolute -top-1 -right-1 px-1 h-4 rounded-full bg-red-600 hover:bg-red-500 text-white text-[8px] font-medium flex items-center justify-center cursor-pointer z-10">Delete</button>
                       ) : (
