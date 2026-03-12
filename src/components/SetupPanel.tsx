@@ -193,13 +193,17 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
           <div className="grid grid-cols-3 gap-2 pt-2">
             {(['Presentation', 'Background', 'Mood'] as const).map((label, i) => (
               <button key={i} onClick={() => onApplyPreset(i)}
-                className={`flex flex-col items-center gap-1.5 py-3 px-2 transition-all cursor-pointer ${
+                className={`flex flex-col items-center justify-center transition-all cursor-pointer ${
                   appState.activePreset === i
                     ? 'bg-white/15 text-white border border-white/20'
                     : 'bg-white/5 hover:bg-white/10 text-white/40 border border-transparent'
-                }`}>
+                }`}
+                style={{ padding: '28px 8px', gap: 12 }}>
                 {sceneIcons[i] || sceneIcons[0]}
-                <span className="text-[11px] leading-none">{label} ({i + 1})</span>
+                <div className="flex flex-col items-center" style={{ gap: 3 }}>
+                  <span style={{ fontSize: 11, lineHeight: 1 }}>{label}</span>
+                  <span style={{ fontSize: 9, lineHeight: 1, opacity: 0.4 }}>{i + 1}</span>
+                </div>
               </button>
             ))}
           </div>

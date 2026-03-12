@@ -171,7 +171,7 @@ export default function CirclesCanvas() {
       music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
 
       const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-      const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
+      const shouldPlay = !soundMutedRef.current && anyEnabled;
 
       if (shouldPlay && audioUnlocked.current) {
         if (!music.isPlaying) await music.start();
@@ -220,7 +220,7 @@ export default function CirclesCanvas() {
       if (music) {
         music.updateConfig(next.music);
         const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-        const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
+        const shouldPlay = !soundMutedRef.current && anyEnabled;
 
         music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
         music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
