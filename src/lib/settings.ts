@@ -65,7 +65,7 @@ function makeDefaultScenes(): [Scene, Scene, Scene] {
       mediaEnabled: false,
       soundEnabled: true,
       musicInstruments: { pling: true, mid1: false, mid2: false, pad: true },
-      presetTemplates: [],
+      presetTemplates: [0],
       cycleIntervalMin: 0,
       cycleIntervalMax: 0,
     },
@@ -96,6 +96,7 @@ export const defaultAppState: AppState = {
   version: '1',
   activePreset: 0,
   scenes: makeDefaultScenes(),
+  customPresets: structuredClone(templatePresets),
   globalColors: {
     backgroundColor: '#6B3A4A',
     paletteColors: [...DEFAULT_PALETTE],
@@ -111,6 +112,7 @@ export const defaultAppState: AppState = {
 export function computeVersionHash(state: AppState): string {
   const content = JSON.stringify({
     scenes: state.scenes,
+    customPresets: state.customPresets,
     globalColors: state.globalColors,
     mediaOverrides: state.mediaOverrides,
     hiddenMedia: state.hiddenMedia,
@@ -167,6 +169,17 @@ export function loadAppState(): AppState {
           pad: { ...base.music.pad, ...(parsed.music.pad || {}) },
           visualReactions: { ...base.music.visualReactions, ...(parsed.music.visualReactions || {}) },
         };
+      }
+
+      // Merge customPresets (fall back to template defaults for any missing)
+      if (parsed.customPresets && Array.isArray(parsed.customPresets)) {
+        merged.customPresets = templatePresets.map((def, i) => {
+          const saved = parsed.customPresets[i];
+          if (!saved) return structuredClone(def);
+          return { name: saved.name ?? def.name, settings: { ...def.settings, ...saved.settings } };
+        });
+      } else {
+        merged.customPresets = structuredClone(templatePresets);
       }
 
       // Ensure hiddenMedia exists
@@ -244,6 +257,15 @@ export async function syncWithServer(current: AppState): Promise<AppState> {
           visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
         };
       }
+      if (server.customPresets && Array.isArray(server.customPresets)) {
+        merged.customPresets = templatePresets.map((def, i) => {
+          const saved = server.customPresets[i];
+          if (!saved) return structuredClone(def);
+          return { name: saved.name ?? def.name, settings: { ...def.settings, ...saved.settings } };
+        });
+      } else {
+        merged.customPresets = structuredClone(templatePresets);
+      }
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
       delete merged.livePresets;
       saveAppState(merged);
@@ -288,6 +310,15 @@ export function resetToServerDefaults(): Promise<AppState> {
           pad: { ...base.music.pad, ...(server.music.pad || {}) },
           visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
         };
+      }
+      if (server.customPresets && Array.isArray(server.customPresets)) {
+        merged.customPresets = templatePresets.map((def, i) => {
+          const saved = server.customPresets[i];
+          if (!saved) return structuredClone(def);
+          return { name: saved.name ?? def.name, settings: { ...def.settings, ...saved.settings } };
+        });
+      } else {
+        merged.customPresets = structuredClone(templatePresets);
       }
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
       delete merged.livePresets;

@@ -255,6 +255,20 @@ export class MediaEngine {
     return this.brightness[idx] || 0;
   }
 
+  // Brightness with contrast and intensity applied but WITHOUT fadeProgress.
+  // Used for sizing during transitions where fade is handled separately.
+  getUnfadedBrightness(nx: number, ny: number): number {
+    const x = Math.floor(nx * (this.sampleWidth - 1));
+    const y = Math.floor(ny * (this.sampleHeight - 1));
+    const idx = y * this.sampleWidth + x;
+    let b = this.brightness[idx] || 0;
+    const blackPoint = this.getCurrentContrast();
+    if (blackPoint > 0.001) {
+      b = Math.max(0, (b - blackPoint) / (1 - blackPoint));
+    }
+    return b * this.getCurrentIntensity();
+  }
+
   forceSample() {
     this.sampleBrightness();
   }

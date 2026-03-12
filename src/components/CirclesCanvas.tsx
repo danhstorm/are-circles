@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { CirclesRenderer } from '@/engine/renderer';
 import { MusicEngine } from '@/engine/music';
 import { AppState, MediaItem } from '@/types';
-import { defaultAppState, loadAppState, saveAppState, buildRendererSettings, syncWithServer, getMediaOverride } from '@/lib/settings';
+import { defaultAppState, defaultSettings, loadAppState, saveAppState, buildRendererSettings, syncWithServer, getMediaOverride } from '@/lib/settings';
 import { templatePresets } from '@/lib/presets';
 import SetupPanel from './SetupPanel';
 import MusicPanel from './MusicPanel';
@@ -14,6 +14,7 @@ export default function CirclesCanvas() {
   const rendererRef = useRef<CirclesRenderer | null>(null);
   const musicRef = useRef<MusicEngine | null>(null);
   const pointerStartRef = useRef({ x: 0, y: 0 });
+  const activeTemplateRef = useRef<number | null>(null);
 
   const [appState, setAppState] = useState<AppState>(defaultAppState);
   const [panelVisible, setPanelVisible] = useState(false);
@@ -63,10 +64,11 @@ export default function CirclesCanvas() {
 
       cycleTemplateIdx.current = (cycleTemplateIdx.current + 1) % currentScene.presetTemplates.length;
       const templateIdx = currentScene.presetTemplates[cycleTemplateIdx.current];
-      const template = templatePresets[templateIdx];
+      const presets = currentState.customPresets || templatePresets;
+      const template = presets[templateIdx];
       if (template) {
         const mergedSettings = buildRendererSettings(
-          { ...currentScene, settings: { ...currentScene.settings, ...template.settings } },
+          { ...currentScene, settings: { ...defaultSettings, ...template.settings } },
           currentState,
         );
         rendererRef.current?.transitionToSettings(mergedSettings);
@@ -82,16 +84,21 @@ export default function CirclesCanvas() {
     autoSave(next);
 
     const scene = next.scenes[idx];
+    // Reset active template ref to first template of new scene
+    const firstTemplate = scene.presetTemplates?.[0] ?? null;
+    activeTemplateRef.current = firstTemplate;
+
     let settings: ReturnType<typeof buildRendererSettings>;
 
     // If scene has preset templates, load the first one
     if (scene.presetTemplates && scene.presetTemplates.length > 0) {
       cycleTemplateIdx.current = 0;
       const templateIdx = scene.presetTemplates[0];
-      const template = templatePresets[templateIdx];
+      const presets = next.customPresets || templatePresets;
+      const template = presets[templateIdx];
       if (template) {
         settings = buildRendererSettings(
-          { ...scene, settings: { ...scene.settings, ...template.settings } },
+          { ...scene, settings: { ...defaultSettings, ...template.settings } },
           next,
         );
       } else {
@@ -138,7 +145,13 @@ export default function CirclesCanvas() {
       const next = updater(prev);
       autoSave(next);
       const scene = next.scenes[next.activePreset];
-      const settings = buildRendererSettings(scene, next);
+      const presets = next.customPresets || templatePresets;
+      const tIdx = activeTemplateRef.current ?? scene.presetTemplates?.[0];
+      const template = tIdx != null ? presets[tIdx] : null;
+      const merged = template
+        ? { ...scene, settings: { ...defaultSettings, ...template.settings } }
+        : scene;
+      const settings = buildRendererSettings(merged, next);
       rendererRef.current?.updateSettings(settings);
 
       // Update media maps
@@ -190,6 +203,36 @@ export default function CirclesCanvas() {
     }
   }, []);
 
+  const toggleSoundMute = useCallback(() => {
+    const music = musicRef.current;
+    if (!music) return;
+    setSoundMuted(prev => {
+      const newMuted = !prev;
+      if (newMuted) {
+        music.fadeOut(2);
+      } else {
+        const state = appStateRef.current;
+        const scene = state.scenes[state.activePreset];
+        if (scene.soundEnabled) {
+          const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
+          if (anyEnabled) {
+            if (!music.isPlaying) {
+              music.start(2).then(() => {
+                music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
+                music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
+                music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
+                music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+              });
+            } else {
+              music.fadeIn(2);
+            }
+          }
+        }
+      }
+      return newMuted;
+    });
+  }, []);
+
   const handleFirstInteraction = useCallback(() => {
     const renderer = rendererRef.current;
     const music = musicRef.current;
@@ -229,15 +272,23 @@ export default function CirclesCanvas() {
       setAppState(state);
     });
 
+    const mergeTemplate = (s: AppState) => {
+      const scene = s.scenes[s.activePreset];
+      const presets = s.customPresets || templatePresets;
+      const tIdx = scene.presetTemplates?.[0];
+      const t = tIdx != null ? presets[tIdx] : null;
+      return t ? { ...scene, settings: { ...defaultSettings, ...t.settings } } : scene;
+    };
+
     syncWithServer(state).then(synced => {
       state = synced;
       appStateRef.current = state;
       setAppState(state);
-      const settings = buildRendererSettings(state.scenes[state.activePreset], state);
+      const settings = buildRendererSettings(mergeTemplate(state), state);
       rendererRef.current?.updateSettings(settings);
     });
 
-    const settings = buildRendererSettings(state.scenes[state.activePreset], state);
+    const settings = buildRendererSettings(mergeTemplate(state), state);
     const renderer = new CirclesRenderer(canvas, settings);
     rendererRef.current = renderer;
 
@@ -334,36 +385,9 @@ export default function CirclesCanvas() {
         case 'm': case 'M':
           rendererRef.current?.triggerMedia();
           break;
-        case 's': case 'S': {
-          const music = musicRef.current;
-          if (!music) break;
-          setSoundMuted(prev => {
-            const newMuted = !prev;
-            if (newMuted) {
-              music.fadeOut(2);
-            } else {
-              const state = appStateRef.current;
-              const scene = state.scenes[state.activePreset];
-              if (scene.soundEnabled) {
-                const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
-                if (anyEnabled) {
-                  if (!music.isPlaying) {
-                    music.start(2).then(() => {
-                      music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
-                      music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
-                      music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
-                      music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
-                    });
-                  } else {
-                    music.fadeIn(2);
-                  }
-                }
-              }
-            }
-            return newMuted;
-          });
+        case 's': case 'S':
+          toggleSoundMute();
           break;
-        }
         case '1': case '2': case '3': {
           const idx = parseInt(e.key) - 1;
           applyPreset(idx, appStateRef.current);
@@ -415,7 +439,10 @@ export default function CirclesCanvas() {
         onClose={() => setPanelVisible(false)}
         appState={appState}
         editingPreset={editingPreset}
-        onSetEditingPreset={setEditingPreset}
+        onSetEditingPreset={(idx) => {
+          setEditingPreset(idx);
+          applyPreset(idx, appState);
+        }}
         onUpdate={updateAppState}
         onApplyPreset={(idx) => applyPreset(idx, appState)}
         audioActive={audioActive}
@@ -460,6 +487,9 @@ export default function CirclesCanvas() {
         }}
         mediaItems={mediaItems}
         activeMediaIndex={activeMediaIndex}
+        soundMuted={soundMuted}
+        onToggleSound={toggleSoundMute}
+        onActiveTemplateChange={(idx) => { activeTemplateRef.current = idx; }}
       />
 
       {/* Settings button (only when panel hidden and not in intro) */}

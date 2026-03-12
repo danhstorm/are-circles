@@ -11,15 +11,14 @@ const MID_PRESETS: Record<MidSound, {
   modRatio: number; modIndex: number; modDecay: number;
   attack: number; decay: number; sustain: number; release: number;
   filterCutoff: number; filterQ: number;
-  detuneCents: number;
   hasNoise?: boolean; noiseLevel?: number;
 }> = {
-  xylophone: { modRatio: 3.0, modIndex: 5, modDecay: 0.06, attack: 0.002, decay: 1.2, sustain: 0, release: 1.5, filterCutoff: 4000, filterQ: 0.7, detuneCents: 3 },
-  rhodes:    { modRatio: 1.0, modIndex: 2.0, modDecay: 0.8, attack: 0.01, decay: 2.0, sustain: 0.15, release: 2.5, filterCutoff: 2500, filterQ: 0.5, detuneCents: 5 },
-  breathy:   { modRatio: 0.5, modIndex: 0.6, modDecay: 1.5, attack: 0.08, decay: 2.5, sustain: 0.25, release: 3.0, filterCutoff: 1800, filterQ: 0.4, detuneCents: 8, hasNoise: true, noiseLevel: 0.12 },
-  bell:      { modRatio: 3.5, modIndex: 6, modDecay: 1.0, attack: 0.002, decay: 3.0, sustain: 0.03, release: 4.0, filterCutoff: 5000, filterQ: 0.8, detuneCents: 2 },
-  kalimba:   { modRatio: 2.0, modIndex: 3, modDecay: 0.1, attack: 0.002, decay: 1.8, sustain: 0, release: 2.0, filterCutoff: 3000, filterQ: 0.6, detuneCents: 4 },
-  glass:     { modRatio: 1.5, modIndex: 0.8, modDecay: 2.0, attack: 0.02, decay: 3.5, sustain: 0.08, release: 4.0, filterCutoff: 3500, filterQ: 0.5, detuneCents: 6 },
+  xylophone: { modRatio: 3.0, modIndex: 5, modDecay: 0.06, attack: 0.002, decay: 1.2, sustain: 0, release: 1.5, filterCutoff: 4000, filterQ: 0.7 },
+  rhodes:    { modRatio: 1.0, modIndex: 2.0, modDecay: 0.8, attack: 0.01, decay: 2.0, sustain: 0.15, release: 2.5, filterCutoff: 2500, filterQ: 0.5 },
+  breathy:   { modRatio: 0.5, modIndex: 0.6, modDecay: 1.5, attack: 0.08, decay: 2.5, sustain: 0.25, release: 3.0, filterCutoff: 1800, filterQ: 0.4, hasNoise: true, noiseLevel: 0.12 },
+  bell:      { modRatio: 3.5, modIndex: 6, modDecay: 1.0, attack: 0.002, decay: 3.0, sustain: 0.03, release: 4.0, filterCutoff: 5000, filterQ: 0.8 },
+  kalimba:   { modRatio: 2.0, modIndex: 3, modDecay: 0.1, attack: 0.002, decay: 1.8, sustain: 0, release: 2.0, filterCutoff: 3000, filterQ: 0.6 },
+  glass:     { modRatio: 1.5, modIndex: 0.8, modDecay: 2.0, attack: 0.02, decay: 3.5, sustain: 0.08, release: 4.0, filterCutoff: 3500, filterQ: 0.5 },
 };
 
 function midiToFreq(midi: number): number {
@@ -59,11 +58,25 @@ function pickChord(scale: number[], bassMidi: number): number[] {
   }
   if (notes.length < 3) return notes;
   const root = notes[Math.floor(Math.random() * Math.min(3, notes.length))];
-  const idx = notes.indexOf(root);
   const chord = [root];
-  if (idx + 2 < notes.length) chord.push(notes[idx + 2]);
-  if (idx + 4 < notes.length) chord.push(notes[idx + 4]);
-  else if (idx + 3 < notes.length) chord.push(notes[idx + 3]);
+  // Find nearest scale note to a third above root (3-4 semitones)
+  let bestThird = -1;
+  let bestThirdDist = 99;
+  for (const n of notes) {
+    if (n <= root) continue;
+    const dist = Math.min(Math.abs(n - root - 3), Math.abs(n - root - 4));
+    if (dist < bestThirdDist) { bestThirdDist = dist; bestThird = n; }
+  }
+  if (bestThird > 0) chord.push(bestThird);
+  // Find nearest scale note to a fifth above root (7 semitones)
+  let bestFifth = -1;
+  let bestFifthDist = 99;
+  for (const n of notes) {
+    if (n <= root + 4) continue;
+    const dist = Math.abs(n - root - 7);
+    if (dist < bestFifthDist) { bestFifthDist = dist; bestFifth = n; }
+  }
+  if (bestFifth > 0) chord.push(bestFifth);
   return chord;
 }
 
@@ -93,19 +106,19 @@ export const defaultMusicConfig: MusicConfig = {
   },
   mid1: {
     volumeMin: 0.2, volumeMax: 0.5, sound: 'glass', speed: '1/2', triggerProbability: 0.35,
-    octaveLow: 3, octaveHigh: 5, filterCutoff: 3000, decay: 1.5, fmAmount: 0.6, detune: 1.2,
+    octaveLow: 3, octaveHigh: 5, filterCutoff: 3000, decay: 1.5, fmAmount: 0.6,
     delay: 0.3, reverb: 0.5,
     autoFilterMin: 3000, autoFilterMax: 3000, autoDecayMin: 1.5, autoDecayMax: 1.5,
     autoFmMin: 0.6, autoFmMax: 0.6, autoTriggerMin: 0.35, autoTriggerMax: 0.35, autoSpeed: 0.04,
   },
   mid2: {
     volumeMin: 0.15, volumeMax: 0.4, sound: 'rhodes', speed: '1/4', triggerProbability: 0.2,
-    octaveLow: 2, octaveHigh: 4, filterCutoff: 2000, decay: 2.0, fmAmount: 0.8, detune: 0.8,
+    octaveLow: 2, octaveHigh: 4, filterCutoff: 2000, decay: 2.0, fmAmount: 0.8,
     delay: 0.4, reverb: 0.6,
     autoFilterMin: 2000, autoFilterMax: 2000, autoDecayMin: 2.0, autoDecayMax: 2.0,
     autoFmMin: 0.8, autoFmMax: 0.8, autoTriggerMin: 0.2, autoTriggerMax: 0.2, autoSpeed: 0.04,
   },
-  pad: { volume: 0.2, chordInterval: 4, reverb: 0.7, filterCutoff: 600, detune: 7, octaveLow: 2, octaveHigh: 3 },
+  pad: { volume: 0.2, chordInterval: 4, reverb: 0.7, filterCutoff: 600, octaveLow: 2, octaveHigh: 3 },
   visualReactions: { swirlStrength: 0.2, swirlRadius: 0.08, sizePulseStrength: 0.15, bassSizeBoost: 0.15 },
 };
 
@@ -229,11 +242,11 @@ export class MusicEngine {
         g.gain.setTargetAtTime(expVol, t, 0.1);
       }
     }
-    // Pad: retrigger chord if tonal/timbral params changed (filter, detune, octave, scale)
+    // Pad: retrigger chord if tonal/timbral params changed (filter, octave, scale)
     if (this.ctx && this._playing && this.instEnabled.pad && this.padActiveChord) {
       const p = c.pad;
       const op = old.pad;
-      if (p.filterCutoff !== op.filterCutoff || p.detune !== op.detune ||
+      if (p.filterCutoff !== op.filterCutoff ||
           p.octaveLow !== op.octaveLow || p.octaveHigh !== op.octaveHigh ||
           c.scale !== old.scale) {
         this.playPadChord(this.ctx.currentTime + 0.05);
@@ -294,9 +307,18 @@ export class MusicEngine {
   private buildGraph() {
     const ctx = this.ctx!;
 
+    // Brick-wall limiter before destination to prevent clipping
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 3;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.05;
+    limiter.connect(ctx.destination);
+
     this.masterGain = ctx.createGain();
     this.masterGain.gain.value = 0;
-    this.masterGain.connect(ctx.destination);
+    this.masterGain.connect(limiter);
 
     // Reverb
     this.reverbConv = ctx.createConvolver();
@@ -525,22 +547,12 @@ export class MusicEngine {
     env.gain.setTargetAtTime(vol * s, time + a, d);
     env.gain.setTargetAtTime(0, time + a + d * 3, r * 0.5);
 
-    // Detuned carrier pair for stereo richness
-    const detuneAmount = preset.detuneCents * mc.detune;
-    const carriers: OscillatorNode[] = [];
-    for (const cents of [-detuneAmount, 0, detuneAmount]) {
-      const carrier = ctx.createOscillator();
-      carrier.type = 'sine';
-      carrier.frequency.value = freq;
-      carrier.detune.value = cents;
-      carrier.connect(filter);
-      carriers.push(carrier);
-    }
-    // Scale down for 3 carriers
-    const carrierGain = ctx.createGain();
-    carrierGain.gain.value = 0.4;
-    filter.connect(carrierGain);
-    carrierGain.connect(env);
+    // Single carrier
+    const carrier = ctx.createOscillator();
+    carrier.type = 'sine';
+    carrier.frequency.value = freq;
+    carrier.connect(filter);
+    filter.connect(env);
 
     // FM modulator with decaying index (sound becomes purer over time)
     const mod = ctx.createOscillator();
@@ -551,7 +563,7 @@ export class MusicEngine {
     modGain.gain.setValueAtTime(modPeak, time);
     modGain.gain.setTargetAtTime(modPeak * 0.1, time + a, modDecayTime);
     mod.connect(modGain);
-    for (const carrier of carriers) modGain.connect(carrier.frequency);
+    modGain.connect(carrier.frequency);
 
     // Optional noise layer
     if (preset.hasNoise) {
@@ -600,12 +612,13 @@ export class MusicEngine {
     }
 
     const stopTime = time + noteDur + 1;
-    for (const carrier of carriers) { carrier.start(time); carrier.stop(stopTime); }
+    carrier.start(time);
+    carrier.stop(stopTime);
     mod.start(time);
     mod.stop(stopTime);
 
-    this.addSwirl(1.0, midi, midiLow, midiHigh);
-    this.addSizePulse(midi, midiLow, midiHigh, 1.0);
+    this.addSwirl(vol * 3, midi, midiLow, midiHigh);
+    this.addSizePulse(midi, midiLow, midiHigh, vol * 3);
 
     // Trigger random dot growth (1-3 dots, strength based on note volume)
     const dotCount = 1 + Math.floor(Math.random() * 3);
@@ -625,14 +638,14 @@ export class MusicEngine {
 
     this.fadePadOut(4);
 
-    const oscCount = chord.length * 3;
+    const oscCount = chord.length;
     const expVol = c.volume * c.volume / Math.sqrt(Math.max(1, oscCount));
 
     const oscs: OscillatorNode[] = [];
     const gains: GainNode[] = [];
     const masterPadGain = ctx.createGain();
     masterPadGain.gain.setValueAtTime(0, time);
-    masterPadGain.gain.linearRampToValueAtTime(expVol, time + 3);
+    masterPadGain.gain.linearRampToValueAtTime(expVol, time + 1.5);
     masterPadGain.connect(this.masterGain!);
 
     if (c.reverb > 0.01 && this.reverbConv) {
@@ -644,19 +657,27 @@ export class MusicEngine {
 
     for (const midi of chord) {
       const freq = midiToFreq(midi);
-      for (let d = -1; d <= 1; d++) {
-        const osc = ctx.createOscillator();
-        osc.type = 'sine';
-        osc.frequency.value = freq * Math.pow(2, (d * c.detune) / 1200);
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = c.filterCutoff;
-        filter.Q.value = 0.5;
-        osc.connect(filter);
-        filter.connect(masterPadGain);
-        osc.start(time);
-        oscs.push(osc);
-      }
+      const osc = ctx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      // Slow vibrato per note (slightly different rate per pitch for organic feel)
+      const vib = ctx.createOscillator();
+      vib.type = 'sine';
+      vib.frequency.value = 3.5 + (midi % 5) * 0.4;
+      const vibGain = ctx.createGain();
+      vibGain.gain.setValueAtTime(0, time);
+      vibGain.gain.linearRampToValueAtTime(freq * 0.004, time + 2);
+      vib.connect(vibGain);
+      vibGain.connect(osc.frequency);
+      vib.start(time);
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = c.filterCutoff;
+      filter.Q.value = 0.7;
+      osc.connect(filter);
+      filter.connect(masterPadGain);
+      osc.start(time);
+      oscs.push(osc, vib);
     }
     gains.push(masterPadGain);
     this.padActiveChord = { oscs, gains };

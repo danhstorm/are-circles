@@ -1,5 +1,10 @@
 # Are Circles - Project Context
 
+## Critical Rules
+
+- **Complete every requested task.** When the user gives a list of changes, track each one (use a todo list), implement each one, and check them off. Do not leave tasks undone. Before finishing, review the original request and confirm every point has been addressed.
+- **Do not skip verification.** Always run typecheck/build before declaring work complete.
+
 ## What This Is
 
 Interactive generative art installation for Are Business Forum. Projected via mirrored projectors in a physical venue. Circles animate with noise/wave patterns, respond to generative music with swirl impulses and size pulses, and morph into halftone-style video grids on timed triggers. Deployed on Vercel, controlled live via keyboard shortcuts.
@@ -118,12 +123,13 @@ docs/
    - Hue drift via noise
    - Blur: only `blurPercent` fraction of particles get bokeh gradient
 
-**Media grid flow:**
-- When media triggers: spawn extra particles at grid positions (size 0, grow in)
-- All particles assigned to nearest grid cell (greedy nearest-first)
-- Staggered blend: each particle has random delay before snapping to grid
-- When media fades out: extras shrink to 0, then removed
-- `baseParticleCount` tracks original count to restore after
+**Media animation transition flow:**
+- **Transition IN**: When media triggers, original particles save their current position (`preMediaX/Y`). Each original is assigned to a grid cell with brightness-aware priority (bright/active areas preferred). Originals then smoothly travel from their current floating position toward their assigned grid cell at individual random speeds. Extra particles needed to fill the grid are spawned at their grid positions with size 0 and grow in gradually. The animation (video) starts playing immediately; dots arrive while it is already running. No particles fly in from off-screen or snap positions.
+- **During animation**: Particles sit at grid cells, sized by video brightness. Normal drift is frozen for originals.
+- **Transition OUT**: Extra particles shrink to 0 and are removed once fully shrunk. Original particles smoothly travel back to their saved pre-media home positions (`preMediaX/Y`) at individual speeds. Once back, normal drift resumes from those positions. The current preset continues as before.
+- **Staggering**: Per-particle `mediaDelay` controls timing. Bright-area particles move first on entry; dark-area particles leave first on exit. `mediaSpeed` adds per-particle speed variation.
+- `baseParticleCount` tracks original count to restore after animation.
+- Scenes never switch automatically. Presets (templates) within a scene cycle on the configured interval.
 
 **Preset transitions:**
 - `transitionToSettings()` stores start + target, resets progress to 0
@@ -228,9 +234,10 @@ Mic input via `getUserMedia`. FFT analysis split into bass/mid/high bands. Smoot
 ## Rendering Patterns & Constraints
 
 - **Edge vignette = size reduction**: Particles near edges shrink with quadratic falloff (10% margin). Never use opacity for edge fade.
-- **All particles travel to grid**: During media animations, every particle moves to a grid cell. No orphans floating outside. Extras spawn at grid positions with size 0 and grow in.
+- **Smooth media transitions**: Original particles travel from their floating positions to assigned grid cells at individual random speeds. No position snapping, no flying from off-screen. Extras spawn at grid cells with size 0 and grow in. On exit, extras shrink away and originals travel back to their saved pre-media positions at individual speeds.
+- **Brightness-aware grid assignment**: Original particles are preferentially assigned to bright (active) grid cells so they visually converge on the visible parts of the animation.
 - **Uniform grid sizing**: During media, all particles use consistent cell-based sizes scaled by video brightness. No depth variation in grid mode.
-- **Particles appear/disappear by shrinking**: Never pop in/out or float in from off-screen. Size transitions have different grow/shrink rates (extras grow slowly at dt*0.4).
+- **Particles appear/disappear by shrinking**: Never pop in/out or teleport. Size transitions have different grow/shrink rates (extras grow slowly).
 - **Music swirl impulses aged once per frame**: The aging loop runs before the particle loop, not inside it. This prevents impulses from decaying N times faster where N = particle count.
 - **Smooth preset transitions**: Bounded linear progress + smoothstep easing. Not exponential decay (which never truly reaches target). Direct start-to-target interpolation.
 - **Canvas alpha: false**: `getContext('2d', { alpha: false })` for faster compositing.
@@ -282,6 +289,5 @@ Push to `main` triggers Vercel auto-deploy. To update default settings for all u
 - **Stale localStorage missing musicInstruments**: Shallow spread overwrote livePresets. Fixed with deep-merge that preserves defaults for missing nested fields.
 - **Swirl impulses aging too fast**: `imp.age += dt` was inside the particle loop (aged N times per frame). Moved to separate loop before particles.
 - **Preset transition jitter**: Exponential decay lerp never reaches target. Replaced with bounded linear progress + smoothstep.
-- **Particles floating away during media**: Not all particles were assigned grid cells. Fixed: all particles now travel to nearest available cell.
-- **Ghost particles appearing too abruptly**: Reduced grow rate for extra particles from dt*0.8 to dt*0.4.
+- **Particles snapping/flying during media transitions**: All particles were being snapped to grid positions instantly and sizes zeroed, causing jarring visual jumps. Fixed: originals now save their pre-media position and smoothly travel to brightness-prioritized grid cells at individual speeds. Extras grow from zero at their grid positions. On exit, originals travel back to saved positions at different speeds.
 - **Pingpong stuck at end**: Native `playbackRate = -1` doesn't work in all browsers. Added manual seeking fallback.

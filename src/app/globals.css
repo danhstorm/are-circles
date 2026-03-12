@@ -94,10 +94,11 @@ input[type="range"]::-moz-range-thumb {
 .companion-shell::after {
   content: '';
   position: absolute;
-  inset: 9px;
+  inset: 5px;
   border-radius: inherit;
   border: 1px solid rgba(35, 41, 47, 0.1);
   pointer-events: none;
+  z-index: 0;
 }
 
 .companion-shell {

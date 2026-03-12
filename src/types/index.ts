@@ -23,6 +23,10 @@ export interface Particle {
   noiseOffsetX: number;
   noiseOffsetY: number;
   notePulse: number;
+  mediaDelay: number;
+  preMediaX: number;
+  preMediaY: number;
+  mediaSpeed: number;
 }
 
 export interface AudioData {
@@ -142,7 +146,6 @@ export interface MidConfig {
   filterCutoff: number;
   decay: number;
   fmAmount: number;
-  detune: number;
   delay: number;
   reverb: number;
   // Automation ranges (ping-pong). When min === max, automation is off.
@@ -162,7 +165,6 @@ export interface PadConfig {
   chordInterval: number;
   reverb: number;
   filterCutoff: number;
-  detune: number;
   octaveLow: number;
   octaveHigh: number;
 }
@@ -230,6 +232,7 @@ export interface AppState {
   scenes: [Scene, Scene, Scene];
   /** @deprecated Use scenes instead */
   livePresets?: [Scene, Scene, Scene];
+  customPresets: Preset[];
   globalColors: {
     backgroundColor: string;
     paletteColors: string[];

@@ -45,6 +45,9 @@ describe('panel smoke tests', () => {
         onUpdateMediaItem={noop}
         mediaItems={[]}
         activeMediaIndex={-1}
+        soundMuted={false}
+        onToggleSound={noop}
+        onActiveTemplateChange={noop}
       />,
     );
 
@@ -74,11 +77,13 @@ describe('panel smoke tests', () => {
         onUpdateMediaItem={noop}
         mediaItems={[]}
         activeMediaIndex={-1}
+        soundMuted={false}
+        onToggleSound={noop}
+        onActiveTemplateChange={noop}
       />,
     );
 
-    expect(screen.getByTestId('live-card-shell')).toHaveAttribute('data-panel-style', 'companion-remote');
-    expect(screen.getByText('Transition Speed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /close/i })).toBeInTheDocument();
+    expect(screen.getByText('Calm')).toBeInTheDocument();
   });
 });
