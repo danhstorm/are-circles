@@ -26,6 +26,7 @@ interface Props {
   activeMediaIndex: number;
   soundMuted: boolean;
   onToggleSound: () => void;
+  playingTemplate: number | null;
   onActiveTemplateChange: (idx: number | null) => void;
   onReorderMedia: (fromIdx: number, toIdx: number) => void;
 }
@@ -221,7 +222,7 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
   );
 }
 
-export default function SetupPanel({ visible, mode, onSetMode, onClose, appState, editingPreset, onSetEditingPreset, onUpdate, onApplyPreset, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, soundMuted, onToggleSound, onActiveTemplateChange, onReorderMedia }: Props) {
+export default function SetupPanel({ visible, mode, onSetMode, onClose, appState, editingPreset, onSetEditingPreset, onUpdate, onApplyPreset, audioActive, onToggleAudio, onTriggerMedia, onTriggerMediaByIndex, onRemoveMedia, onUpdateMediaItem, mediaItems, activeMediaIndex, soundMuted, onToggleSound, playingTemplate, onActiveTemplateChange, onReorderMedia }: Props) {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [colorsOpen, setColorsOpen] = useState(false);
@@ -455,7 +456,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                 </button>
               ))}
             </div>
-            <Slider label="Transition Speed" value={appState.transitionSpeed} min={0.02} max={1} step={0.02} onChange={v => setGlobal('transitionSpeed', v)} />
+            <Slider label="Transition Time (s)" value={appState.transitionSpeed} min={0.1} max={5} step={0.1} onChange={v => setGlobal('transitionSpeed', v)} />
             <label className="flex items-center gap-2 cursor-pointer py-0.5">
               <input type="checkbox" checked={preset.soundEnabled ?? false} onChange={e => setSceneProp('soundEnabled', e.target.checked)} className="accent-white/60 w-3.5 h-3.5" />
               <span className="text-[11px] text-white/55">Sound Enabled</span>
@@ -467,6 +468,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
               {customPresets.map((t, i) => {
                 const enabled = (preset.presetTemplates || []).includes(i);
                 const editing = selectedTemplate === i;
+                const playing = playingTemplate === i;
                 return (
                   <div key={i} className={`flex items-center gap-1.5 px-1.5 py-0.5 transition-colors ${editing ? 'bg-white/12 ring-1 ring-white/20' : ''}`}>
                     <input
@@ -475,6 +477,9 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                       onChange={() => toggleCyclePreset(i)}
                       className="accent-white/60 w-3 h-3 shrink-0 cursor-pointer"
                     />
+                    {playing && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" title="Currently playing" />
+                    )}
                     <button
                       onClick={() => { setSelectedTemplate(i); onActiveTemplateChange(i); }}
                       className={`flex-1 text-left text-[10px] truncate cursor-pointer transition-colors ${
@@ -483,9 +488,9 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                     >
                       {t.name}
                     </button>
-                    {editing && (
-                      <span className="text-[8px] text-white/30 shrink-0">editing</span>
-                    )}
+                    <span className="flex items-center gap-1 shrink-0">
+                      {editing && <span className="text-[8px] text-white/30">editing</span>}
+                    </span>
                   </div>
                 );
               })}

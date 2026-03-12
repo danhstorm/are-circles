@@ -47,6 +47,7 @@ describe('panel smoke tests', () => {
         activeMediaIndex={-1}
         soundMuted={false}
         onToggleSound={noop}
+        playingTemplate={0}
         onActiveTemplateChange={noop}
         onReorderMedia={noop}
       />,
@@ -80,6 +81,7 @@ describe('panel smoke tests', () => {
         activeMediaIndex={-1}
         soundMuted={false}
         onToggleSound={noop}
+        playingTemplate={0}
         onActiveTemplateChange={noop}
         onReorderMedia={noop}
       />,

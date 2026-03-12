@@ -40,6 +40,10 @@ export class CirclesRenderer {
   private introAngles: number[] = [];
   private mediaBrightCenterX = 0;
   private mediaBrightCenterY = 0;
+  // Incrementally accumulated phases to prevent noise jumps when speed params interpolate
+  private driftPhase = 0;
+  private noisePhase = 0;
+  private wavePhase = 0;
   audio: AudioEngine;
   media: MediaEngine;
 
@@ -161,11 +165,11 @@ export class CirclesRenderer {
     const oldCols = this.settings.gridColumns;
     const oldCount = this.settings.circleCount;
 
-    // During transitions, defer particle count and grid column changes to avoid jitter.
+    // During transitions, allow grid columns to change (smooth visual transition)
+    // but defer particle count changes to avoid adding/removing mid-transition.
     if (isTransitioning) {
-      this.settings = { ...s, circleCount: oldCount, gridColumns: oldCols };
-      // Assign grid positions when entering grid mode mid-transition
-      if (s.useGrid && !oldUseGrid) {
+      this.settings = { ...s, circleCount: oldCount };
+      if (s.gridColumns !== oldCols || (s.useGrid && !oldUseGrid)) {
         this.assignGridPositions();
       }
       this.audio.setGain(s.micGain);
@@ -197,8 +201,9 @@ export class CirclesRenderer {
   private lerpSettings(dt: number) {
     if (!this.targetSettings || !this.transitionStart) return;
 
-    const rate = this.targetSettings.presetTransitionSpeed * 2;
-    this.transitionProgress = Math.min(1, this.transitionProgress + rate * dt);
+    // presetTransitionSpeed is duration in seconds (0.1–5.0)
+    const duration = Math.max(0.1, this.targetSettings.presetTransitionSpeed);
+    this.transitionProgress = Math.min(1, this.transitionProgress + dt / duration);
 
     // Smoothstep easing for natural acceleration/deceleration
     const t = this.transitionProgress;
@@ -726,6 +731,14 @@ export class CirclesRenderer {
     // Apply speed boost to time progression
     this.time += this.soundSpeedBoost * dt * 0.8;
 
+    // Accumulate pattern phases incrementally. Using accumulators instead of
+    // this.time * speed prevents phase jumps when speed params interpolate
+    // during preset transitions (the main cause of dot jitter).
+    const phaseRate = s.animationSpeed * 0.5 + this.soundSpeedBoost * 0.8;
+    this.driftPhase += dt * phaseRate * s.driftSpeed;
+    this.noisePhase += dt * phaseRate * s.noiseSpeed;
+    this.wavePhase += dt * phaseRate * s.waveSpeed;
+
     this.media.setEnabled(s.mediaEnabled);
     this.media.setRetainVideo(this.baseParticleCount > 0);
     this.media.update(dt, s.imageIntervalMin, s.imageIntervalMax, s.imageFadeDuration);
@@ -919,8 +932,8 @@ export class CirclesRenderer {
 
       // --- Always update homeX/homeY with drift ---
       // Even during media, keep drifting so the "return destination" stays organic
-      const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.time * s.driftSpeed);
-      const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.time * s.driftSpeed);
+      const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.driftPhase);
+      const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.driftPhase);
       p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed * vs;
       p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed * vs;
 
@@ -969,10 +982,10 @@ export class CirclesRenderer {
         if (gridBlend > 0.001) {
           const looseness = 1 - gridBlend;
           const jitterX = looseness > 0.01
-            ? this.noise3D(p.noiseOffsetX + 300, p.noiseOffsetY + 300, this.time * s.driftSpeed) * 30 * vs * looseness
+            ? this.noise3D(p.noiseOffsetX + 300, p.noiseOffsetY + 300, this.driftPhase) * 30 * vs * looseness
             : 0;
           const jitterY = looseness > 0.01
-            ? this.noise3D(p.noiseOffsetX + 400, p.noiseOffsetY + 400, this.time * s.driftSpeed) * 30 * vs * looseness
+            ? this.noise3D(p.noiseOffsetX + 400, p.noiseOffsetY + 400, this.driftPhase) * 30 * vs * looseness
             : 0;
           targetX = targetX * (1 - gridBlend) + (p.gridX + jitterX) * gridBlend;
           targetY = targetY * (1 - gridBlend) + (p.gridY + jitterY) * gridBlend;
@@ -1049,7 +1062,7 @@ export class CirclesRenderer {
         const noiseSizeVal = (this.noise3D(
           p.x * actualNoiseScale + p.noiseOffsetX,
           p.y * actualNoiseScale + p.noiseOffsetY,
-          this.time * s.noiseSpeed
+          this.noisePhase
         ) + 1) * 0.5;
         sizeMod += (noiseSizeVal - 0.5) * s.noiseStrength;
       }
@@ -1057,7 +1070,7 @@ export class CirclesRenderer {
       if (s.waveStrength > 0.01) {
         const wavelength = Math.max(0.01, s.waveFrequency) * vp;
         const dot = p.x * waveDirX + p.y * waveDirY;
-        const wavePhase = (dot / wavelength) * Math.PI * 2 + this.time * s.waveSpeed * 4;
+        const wavePhase = (dot / wavelength) * Math.PI * 2 + this.wavePhase * 4;
         const waveSizeVal = (Math.sin(wavePhase) + 1) * 0.5;
         sizeMod += (waveSizeVal - 0.5) * s.waveStrength;
       }

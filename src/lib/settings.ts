@@ -50,7 +50,7 @@ export const defaultSettings: Settings = {
   gridMaxSize: 30,
   gravityShape: 'none',
   gravityStrength: 0.3,
-  presetTransitionSpeed: 0.15,
+  presetTransitionSpeed: 1.5,
   autoPresetEnabled: false,
   autoPresetIntervalMin: 30,
   autoPresetIntervalMax: 60,
@@ -106,7 +106,7 @@ export const defaultAppState: AppState = {
   mediaOrder: [],
   hiddenMedia: [],
   mediaGridColumns: 40,
-  transitionSpeed: 0.15,
+  transitionSpeed: 1.5,
   transitionTiming: {
     enterSpeed: 1.0,
     exitSpeed: 1.0,

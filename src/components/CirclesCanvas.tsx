@@ -24,6 +24,7 @@ export default function CirclesCanvas() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
   const [editingPreset, setEditingPreset] = useState(0);
+  const [playingTemplate, setPlayingTemplate] = useState<number | null>(null);
   const [inIntro, setInIntro] = useState(true);
   const [soundMuted, setSoundMuted] = useState(() => defaultAppState.soundMuted);
 
@@ -32,6 +33,7 @@ export default function CirclesCanvas() {
   const cycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTemplateIdx = useRef(0);
   const audioUnlocked = useRef(false);
+  const modeRef = useRef<'live' | 'setup'>(mode);
   const isDev = process.env.NODE_ENV === 'development';
 
   const autoSave = useCallback((state: AppState) => {
@@ -66,8 +68,22 @@ export default function CirclesCanvas() {
     soundMutedRef.current = soundMuted;
   }, [soundMuted]);
 
+  useEffect(() => {
+    modeRef.current = mode;
+    if (mode === 'setup') {
+      // Stop auto-cycling when entering setup mode
+      clearTimeout(cycleTimer.current);
+    } else {
+      // Resume cycling when going back to live mode
+      startPresetCycling(appStateRef.current);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
   const startPresetCycling = useCallback((state: AppState) => {
     clearTimeout(cycleTimer.current);
+    // Don't start cycling in setup mode
+    if (modeRef.current === 'setup') return;
     const scene = state.scenes[state.activePreset];
     if (!scene.presetTemplates || scene.presetTemplates.length < 2 || scene.cycleIntervalMin <= 0) return;
 
@@ -78,6 +94,9 @@ export default function CirclesCanvas() {
     };
 
     const cycle = () => {
+      // Skip cycle tick if in setup mode
+      if (modeRef.current === 'setup') return;
+
       const currentState = appStateRef.current;
       const currentScene = currentState.scenes[currentState.activePreset];
       if (!currentScene.presetTemplates || currentScene.presetTemplates.length < 2) return;
@@ -96,6 +115,7 @@ export default function CirclesCanvas() {
           currentState,
         );
         rendererRef.current?.transitionToSettings(mergedSettings);
+        setPlayingTemplate(templateIdx);
       }
       cycleTimer.current = setTimeout(cycle, randomInterval(currentScene));
     };
@@ -111,6 +131,7 @@ export default function CirclesCanvas() {
     // Reset active template ref to first template of new scene
     const firstTemplate = scene.presetTemplates?.[0] ?? null;
     activeTemplateRef.current = firstTemplate;
+    setPlayingTemplate(firstTemplate);
 
     let settings: ReturnType<typeof buildRendererSettings>;
 
@@ -565,9 +586,11 @@ export default function CirclesCanvas() {
         activeMediaIndex={activeMediaIndex}
         soundMuted={soundMuted}
         onToggleSound={toggleSoundMute}
+        playingTemplate={playingTemplate}
         onActiveTemplateChange={(idx) => {
           activeTemplateRef.current = idx;
-          // Push the new template's settings to the renderer immediately
+          setPlayingTemplate(idx);
+          // Push the new template's settings to the renderer with a smooth transition
           const state = appStateRef.current;
           const scene = state.scenes[state.activePreset];
           const presets = state.customPresets || templatePresets;
