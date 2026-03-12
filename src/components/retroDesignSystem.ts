@@ -47,6 +47,18 @@ export const synthSkins = {
     displayFont: '"Helvetica Neue", Arial, sans-serif',
     labelFont: '"Courier New", monospace',
   },
+  drums: {
+    bg: '#e3dbd4',
+    primary: '#c45c3e',
+    secondary: '#7a4232',
+    stripe: '#e89878',
+    text: '#1f140f',
+    label: 'DRUMS',
+    sub: '16-STEP SEQUENCER',
+    type: 'DR-16',
+    displayFont: '"Helvetica Neue", Arial, sans-serif',
+    labelFont: '"Courier New", monospace',
+  },
   vr: {
     bg: '#dedbea',
     primary: '#6e72b8',

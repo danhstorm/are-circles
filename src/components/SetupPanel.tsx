@@ -97,16 +97,35 @@ function RangeSlider({ label, low, high, min, max, step, onChange }: {
         <span className="text-white/35 tabular-nums text-[10px] ml-2 min-w-[4.4em] text-right">{low.toFixed(decimals)} – {high.toFixed(decimals)}</span>
       </div>
       <div ref={trackRef} className="relative h-4 flex items-center" style={{ padding: `0 ${HALF}px` }}>
-        <div className="absolute h-1 rounded-full bg-white/10" style={{ left: HALF, right: HALF }} />
-        <div className="absolute h-1 rounded-full bg-white/20" style={{ left: `${lowPct}%`, right: `${100 - highPct}%` }} />
+        <div className="absolute rounded-sm" style={{ left: HALF, right: HALF, height: 3, background: 'rgba(255,255,255,0.08)' }} />
+        <div className="absolute rounded-sm" style={{
+          left: `${lowPct}%`,
+          right: `${100 - highPct}%`,
+          height: 3,
+          background: 'linear-gradient(90deg, rgba(255,255,255,0.15), rgba(255,255,255,0.35), rgba(255,255,255,0.15))',
+        }} />
+        {/* Low thumb: triangle pointing right */}
         <div
-          className="absolute w-3 h-3 rounded-full bg-white/65 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
-          style={{ left: `${lowPct}%` }}
+          className="absolute -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{
+            left: `${lowPct}%`,
+            width: 0, height: 0,
+            borderTop: '5px solid transparent',
+            borderBottom: '5px solid transparent',
+            borderLeft: '6px solid rgba(255,255,255,0.6)',
+          }}
           onPointerDown={startDrag('low')}
         />
+        {/* High thumb: triangle pointing left */}
         <div
-          className="absolute w-3 h-3 rounded-full bg-white/65 -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
-          style={{ left: `${highPct}%` }}
+          className="absolute -translate-x-1/2 cursor-grab active:cursor-grabbing touch-none"
+          style={{
+            left: `${highPct}%`,
+            width: 0, height: 0,
+            borderTop: '5px solid transparent',
+            borderBottom: '5px solid transparent',
+            borderRight: '6px solid rgba(255,255,255,0.6)',
+          }}
           onPointerDown={startDrag('high')}
         />
       </div>

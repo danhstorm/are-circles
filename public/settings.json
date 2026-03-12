@@ -1,6 +1,6 @@
 {
-  "version": "rrao4y",
-  "activePreset": 1,
+  "version": "1i5ktz",
+  "activePreset": 0,
   "scenes": [
     {
       "name": "Calm",
@@ -512,7 +512,7 @@
     "/media/ballerina-dancing.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 0.85,
+      "intensity": 1.35,
       "contrast": 0,
       "zoomToFit": true
     },

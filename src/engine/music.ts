@@ -1,6 +1,7 @@
 import {
-  MusicConfig, MidConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse,
+  MusicConfig, MidConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse, DrumRipple,
 } from '@/types';
+import { DrumMachine, defaultDrumConfig } from './drums';
 
 const SCALES: Record<ScaleType, number[]> = {
   'pentatonic-major': [0, 2, 4, 7, 9],
@@ -119,6 +120,7 @@ export const defaultMusicConfig: MusicConfig = {
     autoFmMin: 0.8, autoFmMax: 0.8, autoTriggerMin: 0.2, autoTriggerMax: 0.2, autoSpeed: 0.04,
   },
   pad: { volume: 0.2, chordInterval: 4, reverb: 0.7, filterCutoff: 600, octaveLow: 2, octaveHigh: 3 },
+  drums: defaultDrumConfig,
   visualReactions: { swirlStrength: 0.2, swirlRadius: 0.08, sizePulseStrength: 0.15, bassSizeBoost: 0.15 },
 };
 
@@ -133,7 +135,8 @@ export class MusicEngine {
   private delayFilter: BiquadFilterNode | null = null;
 
   private config: MusicConfig;
-  private instEnabled = { pling: false, mid1: false, mid2: false, pad: false };
+  private instEnabled = { pling: false, mid1: false, mid2: false, pad: false, drums: false };
+  readonly drums: DrumMachine;
 
   private schedulerTimer: ReturnType<typeof setInterval> | null = null;
   private readonly LOOKAHEAD = 0.1;
@@ -155,6 +158,7 @@ export class MusicEngine {
 
   constructor(config?: MusicConfig) {
     this.config = config ? { ...config } : { ...defaultMusicConfig };
+    this.drums = new DrumMachine(this.config.drums);
   }
 
   async start(fadeDur = 2) {

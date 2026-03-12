@@ -110,6 +110,74 @@ export type ScaleType = 'pentatonic-major' | 'pentatonic-minor';
 export type MidSound = 'xylophone' | 'rhodes' | 'breathy' | 'bell' | 'kalimba' | 'glass';
 export type SpeedSubdivision = '1/1' | '1/2' | '1/3' | '1/4' | '1/6' | '1/8' | '1/16';
 
+export const DRUM_SOUND_NAMES = ['kick', 'woodblock1', 'woodblock2', 'clap', 'snare', 'hihat', 'gong'] as const;
+export type DrumSoundName = typeof DRUM_SOUND_NAMES[number];
+
+export const DRUM_LABELS: Record<DrumSoundName, string> = {
+  kick: 'Kick',
+  woodblock1: 'Wood 1',
+  woodblock2: 'Wood 2',
+  clap: 'Clap',
+  snare: 'Snare',
+  hihat: 'HiHat',
+  gong: 'Gong',
+};
+
+export type DrumReactionGroup = 'low' | 'mid' | 'high';
+
+export const DRUM_REACTION_GROUPS: Record<DrumSoundName, DrumReactionGroup> = {
+  kick: 'low',
+  gong: 'low',
+  snare: 'mid',
+  clap: 'mid',
+  woodblock1: 'mid',
+  woodblock2: 'mid',
+  hihat: 'high',
+};
+
+export interface DrumSoundConfig {
+  pattern: boolean[];
+  volume: number;
+  decayMin: number;
+  decayMax: number;
+  pitchMin: number;
+  pitchMax: number;
+  delayMin: number;
+  delayMax: number;
+  flangerMin: number;
+  flangerMax: number;
+  chorusMin: number;
+  chorusMax: number;
+}
+
+export interface DrumReactionGroupConfig {
+  waveStrength: number;
+  waveSpeed: number;
+  sizeAmount: number;
+  positionAmount: number;
+}
+
+export interface DrumConfig {
+  volume: number;
+  speed: SpeedSubdivision;
+  autoSpeed: number;
+  sounds: Record<DrumSoundName, DrumSoundConfig>;
+  reactions: Record<DrumReactionGroup, DrumReactionGroupConfig>;
+}
+
+export interface DrumRipple {
+  x: number;
+  y: number;
+  radius: number;
+  maxRadius: number;
+  speed: number;
+  strength: number;
+  sizeAmount: number;
+  positionAmount: number;
+  age: number;
+  maxAge: number;
+}
+
 export interface PlingConfig {
   volumeMin: number;
   volumeMax: number;
@@ -187,6 +255,7 @@ export interface MusicConfig {
   mid1: MidConfig;
   mid2: MidConfig;
   pad: PadConfig;
+  drums: DrumConfig;
   visualReactions: VisualReactionConfig;
 }
 
@@ -202,6 +271,7 @@ export interface Scene {
     mid1: boolean;
     mid2: boolean;
     pad: boolean;
+    drums: boolean;
   };
   presetTemplates: number[];
   cycleIntervalMin: number;
