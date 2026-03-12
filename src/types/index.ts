@@ -28,6 +28,8 @@ export interface Particle {
   preMediaX: number;
   preMediaY: number;
   mediaSpeed: number;
+  mediaBlendProgress: number;
+  preMediaSize: number;
 }
 
 export interface AudioData {
@@ -212,6 +214,7 @@ export type LivePreset = Scene;
 export interface MediaOverride {
   playMode: MediaPlayMode;
   invert: boolean;
+  zoomToFit: boolean;
   intensity: number;
   contrast: number;
 }
@@ -244,6 +247,14 @@ export interface AppState {
   hiddenMedia: string[];
   mediaGridColumns: number;
   transitionSpeed: number;
+  transitionTiming: TransitionTiming;
   soundMuted: boolean;
   music: MusicConfig;
+}
+
+export interface TransitionTiming {
+  enterSpeed: number;
+  exitSpeed: number;
+  gridBlendIn: number;
+  gridBlendOut: number;
 }

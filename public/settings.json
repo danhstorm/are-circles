@@ -1,5 +1,5 @@
 {
-  "version": "jpzs69",
+  "version": "pfba0f",
   "activePreset": 0,
   "scenes": [
     {
@@ -132,14 +132,14 @@
         "driftStrength": 10,
         "driftSpeed": 0.15,
         "waveStrength": 0.2,
-        "waveFrequency": 0.3,
-        "waveSpeed": 0.2,
+        "waveFrequency": 0.1,
+        "waveSpeed": 0.25,
         "soundSensitivity": 0.3,
         "soundSmoothing": 0.97,
         "soundBurstDecay": 0.95,
         "micGain": 0.5,
         "imageIntervalMin": 5,
-        "imageIntervalMax": 16,
+        "imageIntervalMax": 9,
         "imageFadeDuration": 3,
         "imageIntensity": 0.5,
         "mediaEnabled": false,
@@ -460,26 +460,30 @@
     "/media/adobe-particles-burst.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 0.7,
-      "contrast": 0
+      "intensity": 0.15,
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/adobe-liquid-swirl.mp4": {
       "playMode": "loop",
-      "invert": false,
-      "intensity": 1.15,
-      "contrast": 0.35
+      "invert": true,
+      "intensity": 0.4,
+      "contrast": 0.2,
+      "zoomToFit": true
     },
     "/media/4kq40epqpu_360.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 0.7,
-      "contrast": 0
+      "intensity": 0.4,
+      "contrast": 0,
+      "zoomToFit": false
     },
     "/media/arm-movement.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 0.7,
-      "contrast": 0
+      "intensity": 0.45,
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/adobe-sine-curtain2.mp4": {
       "playMode": "loop",
@@ -496,13 +500,15 @@
     "/media/ballerina-dancing.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 1.05,
-      "contrast": 0.2
+      "intensity": 0.85,
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/dna-chain.mp4": {
-      "playMode": "loop",
+      "playMode": "pingpong",
       "invert": true,
-      "intensity": 1.5,
+      "zoomToFit": true,
+      "intensity": 0.4,
       "contrast": 0.55
     },
     "/media/dancer-silhouette.mp4": {
@@ -514,7 +520,7 @@
     "/media/dust-scatter.mp4": {
       "playMode": "pingpong",
       "invert": false,
-      "intensity": 1.2,
+      "intensity": 0.55,
       "contrast": 0
     },
     "/media/fireworks-glow.mp4": {
@@ -556,8 +562,9 @@
     "/media/hand-gesture.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 1.5,
-      "contrast": 0
+      "intensity": 0.8,
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/light-trails.mp4": {
       "playMode": "loop",
@@ -574,14 +581,16 @@
     "/media/scifi-character.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 1.5,
-      "contrast": 0
+      "intensity": 1.1,
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/sine-curtain.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 1.15,
-      "contrast": 0.15
+      "intensity": 0.6,
+      "contrast": 0.15,
+      "zoomToFit": true
     },
     "/media/venice-beach-woman.mp4": {
       "playMode": "loop",
@@ -604,38 +613,51 @@
     "/media/bird-landing.mp4": {
       "playMode": "pingpong",
       "invert": false,
-      "intensity": 0.7,
+      "intensity": 0.4,
       "contrast": 0
     },
     "/media/gradient-grid.mp4": {
       "playMode": "loop",
       "invert": false,
       "intensity": 1.5,
-      "contrast": 0
+      "contrast": 0,
+      "zoomToFit": true
     },
     "/media/glowing-liquid.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 1.3,
+      "intensity": 0.45,
+      "contrast": 0,
+      "zoomToFit": true
+    },
+    "/media/black-hole.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 0.35,
+      "contrast": 0
+    },
+    "/media/adobe-spiral.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 0.35,
       "contrast": 0
     }
   },
   "mediaOrder": [
+    "/media/glowing-liquid.mp4",
     "/media/4kq40epqpu_360.mp4",
     "/media/adobe-liquid-swirl.mp4",
     "/media/dna-chain.mp4",
-    "/media/adobe-particles-burst.mp4",
-    "/media/adobe-spiral.mp4",
     "/media/ballerina-dancing.mp4",
+    "/media/scifi-character.mp4",
+    "/media/hand-gesture.mp4",
+    "/media/sine-curtain.mp4",
+    "/media/adobe-spiral.mp4",
     "/media/arm-movement.mp4",
     "/media/bird-landing.mp4",
-    "/media/black-hole.mp4",
-    "/media/dust-scatter.mp4",
-    "/media/glowing-liquid.mp4",
     "/media/gradient-grid.mp4",
-    "/media/hand-gesture.mp4",
-    "/media/scifi-character.mp4",
-    "/media/sine-curtain.mp4"
+    "/media/adobe-particles-burst.mp4",
+    "/media/black-hole.mp4"
   ],
   "hiddenMedia": [
     "/media/tunnel-zoom.mp4",
@@ -663,14 +685,21 @@
     "/media/fireworks-glow.mp4",
     "/media/neon-colors.mp4",
     "/media/powder-explosion.mp4",
-    "/media/bubbles-overlay.mp4"
+    "/media/bubbles-overlay.mp4",
+    "/media/dust-scatter.mp4"
   ],
-  "mediaGridColumns": 136,
+  "mediaGridColumns": 115,
   "transitionSpeed": 0.24,
+  "transitionTiming": {
+    "enterSpeed": 0.3,
+    "exitSpeed": 0.25,
+    "gridBlendIn": 1.6,
+    "gridBlendOut": 1.5
+  },
   "soundMuted": false,
   "music": {
     "scale": "pentatonic-minor",
-    "tempo": 63,
+    "tempo": 61,
     "masterVolume": 0.85,
     "pling": {
       "volumeMin": 0.05,
@@ -681,27 +710,27 @@
       "reverb": 0.25,
       "lfoSpeed": 1.5,
       "lfoDepth": 0.3,
-      "octaveLow": 4,
+      "octaveLow": 5,
       "octaveHigh": 7,
       "filterCutoff": 3000,
       "filterQ": 8,
       "decay": 0.2,
       "autoFilterMin": 3500,
       "autoFilterMax": 8000,
-      "autoDecayMin": 0.08,
-      "autoDecayMax": 0.48,
-      "autoLfoSpeedMin": 1.7,
-      "autoLfoSpeedMax": 7.6,
+      "autoDecayMin": 0.06,
+      "autoDecayMax": 0.34,
+      "autoLfoSpeedMin": 4.9,
+      "autoLfoSpeedMax": 8.8,
       "autoLfoDepthMin": 0.3,
-      "autoLfoDepthMax": 0.8,
+      "autoLfoDepthMax": 1,
       "autoTriggerMin": 0.7,
       "autoTriggerMax": 1,
       "autoSpeed": 0.1
     },
     "mid1": {
-      "volumeMin": 0,
-      "volumeMax": 0.55,
-      "sound": "glass",
+      "volumeMin": 0.15,
+      "volumeMax": 0.45,
+      "sound": "xylophone",
       "speed": "1/8",
       "triggerProbability": 0.35,
       "octaveLow": 3,
@@ -709,26 +738,26 @@
       "filterCutoff": 3000,
       "decay": 1.5,
       "fmAmount": 0.6,
-      "delay": 0,
-      "reverb": 0.05,
+      "delay": 0.3,
+      "reverb": 0.15,
       "autoFilterMin": 600,
       "autoFilterMax": 3550,
       "autoDecayMin": 0.2,
       "autoDecayMax": 1,
-      "autoFmMin": 0.9,
-      "autoFmMax": 2.5,
+      "autoFmMin": 1.2,
+      "autoFmMax": 2.8,
       "autoTriggerMin": 0.6,
       "autoTriggerMax": 0.85,
       "autoSpeed": 0.08,
       "detune": 0
     },
     "mid2": {
-      "volumeMin": 0.45,
-      "volumeMax": 0.9,
+      "volumeMin": 0.2,
+      "volumeMax": 0.55,
       "sound": "kalimba",
-      "speed": "1/4",
+      "speed": "1/16",
       "triggerProbability": 0.2,
-      "octaveLow": 2,
+      "octaveLow": 1,
       "octaveHigh": 5,
       "filterCutoff": 2000,
       "decay": 2,
@@ -741,17 +770,17 @@
       "autoDecayMax": 0.7,
       "autoFmMin": 0.8,
       "autoFmMax": 2.5,
-      "autoTriggerMin": 0.75,
-      "autoTriggerMax": 1,
+      "autoTriggerMin": 0.3,
+      "autoTriggerMax": 0.6,
       "autoSpeed": 0.13,
       "detune": 0
     },
     "pad": {
-      "volume": 0.15,
-      "chordInterval": 5,
-      "reverb": 0.2,
-      "filterCutoff": 1350,
-      "octaveLow": 3,
+      "volume": 0.3,
+      "chordInterval": 3,
+      "reverb": 0.35,
+      "filterCutoff": 900,
+      "octaveLow": 2,
       "octaveHigh": 4,
       "detune": 0
     },

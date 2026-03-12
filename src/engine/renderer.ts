@@ -28,6 +28,7 @@ export class CirclesRenderer {
   private cursorVx = 0;
   private cursorVy = 0;
   private cursorDown = false;
+  transitionTiming = { enterSpeed: 1.0, exitSpeed: 1.0, gridBlendIn: 0.8, gridBlendOut: 0.8 };
   private swirlImpulses: SwirlImpulse[] = [];
   private musicSizePulse = 0;
   private targetSettings: Settings | null = null;
@@ -160,10 +161,10 @@ export class CirclesRenderer {
     const oldCols = this.settings.gridColumns;
     const oldCount = this.settings.circleCount;
 
-    // During transitions, defer particle count/column changes to avoid jitter
+    // During transitions, defer particle count and grid column changes to avoid jitter.
     if (isTransitioning) {
       this.settings = { ...s, circleCount: oldCount, gridColumns: oldCols };
-      // Keep grid positions updated when entering grid mode mid-transition
+      // Assign grid positions when entering grid mode mid-transition
       if (s.useGrid && !oldUseGrid) {
         this.assignGridPositions();
       }
@@ -178,9 +179,10 @@ export class CirclesRenderer {
       (s.useGrid && s.gridColumns !== oldCols) ||
       (!s.useGrid && s.circleCount !== oldCount);
 
-    // Only scatter if switching directly from grid to free (not after a smooth blend
-    // where floatGridBlend was already faded to 0 by lerpSettings)
-    if (oldUseGrid && !s.useGrid && s.floatGridBlend >= 0.5) {
+    // Only scatter if switching grid→free without a smooth transition (e.g. direct
+    // updateSettings call). When lerpSettings drove the blend to 0, particles already
+    // drifted to their free positions, so scattering would teleport them.
+    if (oldUseGrid && !s.useGrid && !this.transitionStart) {
       this.scatterParticles();
     }
 
@@ -228,13 +230,18 @@ export class CirclesRenderer {
           : val;
     }
 
-    // Smooth grid transition: blend floatGridBlend toward target
+    // Smooth grid transition: drive floatGridBlend between grid and free states.
+    // floatGridBlend controls how tightly particles stick to the grid (1 = locked, 0 = free).
     if (a.useGrid !== b.useGrid) {
-      const gridStart = a.useGrid ? Math.max(a.floatGridBlend, 0.001) : 0;
-      const gridTarget = b.useGrid ? Math.max(b.floatGridBlend, 0.001) : 0;
+      // Entering grid: ramp blend from 0 → target; leaving grid: ramp from current → 0
+      const gridStart = a.useGrid ? Math.max(a.floatGridBlend, 0.01) : 0;
+      const gridTarget = b.useGrid ? Math.max(b.floatGridBlend, 0.01) : 0;
       next.floatGridBlend = gridStart + (gridTarget - gridStart) * eased;
-      // Keep useGrid active while blend is still > 0 so grid positions are used
       next.useGrid = next.floatGridBlend > 0.001;
+    } else if (a.useGrid && b.useGrid) {
+      // Both grid — the numericKeys lerp already handled floatGridBlend,
+      // but make sure useGrid stays true
+      next.useGrid = true;
     }
 
     // Snap non-numeric values
@@ -324,6 +331,8 @@ export class CirclesRenderer {
         preMediaX: 0,
         preMediaY: 0,
         mediaSpeed: 0,
+        mediaBlendProgress: 0,
+        preMediaSize: 0,
       });
     }
     this.assignGridPositions();
@@ -364,6 +373,8 @@ export class CirclesRenderer {
         preMediaX: 0,
         preMediaY: 0,
         mediaSpeed: 0,
+        mediaBlendProgress: 0,
+        preMediaSize: 0,
       });
     }
     if (this.particles.length > target) {
@@ -492,61 +503,44 @@ export class CirclesRenderer {
 
     this.media.forceSample();
 
-    const cells: { x: number; y: number; key: number }[] = [];
+    // Build cells with brightness, scored with center bias so dots
+    // prefer the middle of the viewport over edges/corners.
+    const cells: { x: number; y: number; key: number; bright: number; score: number }[] = [];
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        cells.push({ x: (c + 0.5) * cellW, y: (r + 0.5) * cellW, key: r * cols + c });
+        const cx = (c + 0.5) * cellW;
+        const cy = (r + 0.5) * cellW;
+        const b = this.media.getRawBrightness(
+          Math.max(0, Math.min(1, cx / w)),
+          Math.max(0, Math.min(1, cy / h))
+        );
+        const dx = cx / w - 0.5;
+        const dy = cy / h - 0.5;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const centerBias = 1 - dist * 0.8;
+        cells.push({ x: cx, y: cy, key: r * cols + c, bright: b, score: b * centerBias });
       }
     }
 
-    const cellBrightness = cells.map(c =>
-      this.media.getRawBrightness(
-        Math.max(0, Math.min(1, c.x / w)),
-        Math.max(0, Math.min(1, c.y / h))
-      )
-    );
+    // Sort by score (brightness * center proximity) so dots concentrate toward middle
+    const sorted = [...cells].sort((a, b) => b.score - a.score);
 
     const origCount = Math.min(this.baseParticleCount, this.particles.length);
-    const taken = new Set<number>();
 
-    // For each original particle, find nearest cell preferring bright ones
-    const assignments = this.particles.slice(0, origCount).map((p, i) => {
-      let bestD = Infinity, bestIdx = 0;
-      let bestBrightD = Infinity, bestBrightIdx = -1;
-      for (let ci = 0; ci < cells.length; ci++) {
-        const dx = p.x - cells[ci].x, dy = p.y - cells[ci].y;
-        const d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; bestIdx = ci; }
-        if (cellBrightness[ci] > 0.1 && d < bestBrightD) {
-          bestBrightD = d;
-          bestBrightIdx = ci;
-        }
-      }
-      const useBright = bestBrightIdx >= 0 && bestBrightD < bestD * 4;
-      return { i, ci: useBright ? bestBrightIdx : bestIdx, d: useBright ? bestBrightD : bestD };
-    }).sort((a, b) => a.d - b.d);
-
-    for (const { i, ci } of assignments) {
-      let cell = cells[ci];
-      if (taken.has(cell.key)) {
-        let bestD = Infinity;
-        for (const c of cells) {
-          if (taken.has(c.key)) continue;
-          const dx = this.particles[i].x - c.x, dy = this.particles[i].y - c.y;
-          const d = dx * dx + dy * dy;
-          if (d < bestD) { bestD = d; cell = c; }
-        }
-      }
-      taken.add(cell.key);
-      this.particles[i].mediaGridX = cell.x;
-      this.particles[i].mediaGridY = cell.y;
+    // Assign originals to the BRIGHTEST cells. This forces all original dots
+    // to converge on the active/bright area of the video during transition.
+    const usedKeys = new Set<number>();
+    for (let i = 0; i < origCount && i < sorted.length; i++) {
+      this.particles[i].mediaGridX = sorted[i].x;
+      this.particles[i].mediaGridY = sorted[i].y;
+      usedKeys.add(sorted[i].key);
     }
 
-    // Extras: assign to remaining cells
-    const remainingCells = cells.filter(c => !taken.has(c.key));
+    // Extras get the remaining (darker) cells
+    const remaining = cells.filter(c => !usedKeys.has(c.key));
     for (let i = origCount; i < this.particles.length; i++) {
-      const ri = (i - origCount) % Math.max(1, remainingCells.length);
-      const cell = remainingCells.length > 0 ? remainingCells[ri] : cells[i % totalCells];
+      const ri = (i - origCount) % Math.max(1, remaining.length);
+      const cell = remaining.length > 0 ? remaining[ri] : cells[i % totalCells];
       this.particles[i].mediaGridX = cell.x;
       this.particles[i].mediaGridY = cell.y;
       this.particles[i].x = cell.x;
@@ -690,7 +684,7 @@ export class CirclesRenderer {
         const ownPhase = p.noiseOffsetX * 100;
         const sizeOsc = 1 + Math.sin(this.introTime * ownSpeed + ownPhase) * 0.3
                            + Math.sin(this.introTime * ownSpeed * 0.6 + ownPhase * 1.7) * 0.15;
-        const perParticleScale = 0.35 + p.depth * 0.9 + Math.sin(baseAngle * 7.3) * 0.15;
+        const perParticleScale = 0.15 + p.depth * 0.35 + Math.sin(baseAngle * 7.3) * 0.06;
         p.targetSize = avgSize * sizeOsc * perParticleScale;
         p.size += (p.targetSize - p.size) * Math.min(1, dt * 2);
         const baseOpacity = s.opacityMin + p.depth * (s.opacityMax - s.opacityMin);
@@ -733,6 +727,7 @@ export class CirclesRenderer {
     this.time += this.soundSpeedBoost * dt * 0.8;
 
     this.media.setEnabled(s.mediaEnabled);
+    this.media.setRetainVideo(this.baseParticleCount > 0);
     this.media.update(dt, s.imageIntervalMin, s.imageIntervalMax, s.imageFadeDuration);
 
     // Media auto-grid: blend toward grid when media is active
@@ -744,17 +739,19 @@ export class CirclesRenderer {
           this.baseParticleCount = this.particles.length;
         }
 
-        // Save pre-media position and assign random travel speed for all originals
+        // Save pre-media position/size for all originals
         for (let i = 0; i < this.baseParticleCount; i++) {
           const p = this.particles[i];
           p.preMediaX = p.x;
           p.preMediaY = p.y;
-          p.mediaSpeed = 0.6 + Math.random() * 0.8;
+          p.preMediaSize = p.size;
+          p.mediaSpeed = 0.7 + Math.random() * 0.6;
+          p.mediaBlendProgress = 0;
         }
 
         const totalNeeded = this.getMediaGridCount();
 
-        // Spawn extra particles at their grid positions with size 0 (will grow in)
+        // Spawn extra particles at their grid positions with size 0 (will grow in later)
         if (this.particles.length < totalNeeded) {
           const cols = s.mediaGridColumns;
           const cellW = w / cols;
@@ -775,9 +772,10 @@ export class CirclesRenderer {
               opacity: s.opacityMin + depth * (s.opacityMax - s.opacityMin),
               depth, gridX: 0, gridY: 0, mediaGridX: gx, mediaGridY: gy,
               noiseOffsetX: Math.random() * 1000, noiseOffsetY: Math.random() * 1000,
-              notePulse: 0, mediaDelay: 0.4 + Math.random() * 0.4,
+              notePulse: 0, mediaDelay: 0,
               preMediaX: gx, preMediaY: gy,
               mediaSpeed: 0.5 + Math.random() * 0.8,
+              mediaBlendProgress: 0, preMediaSize: 0,
             });
           }
           this.rebuildSortOrder();
@@ -786,7 +784,7 @@ export class CirclesRenderer {
         // Assign originals to bright cells, extras to remaining cells
         this.assignMediaGridPositionsBrightnessAware();
 
-        // Set per-particle mediaDelay and compute brightness centroid for gathering
+        // Compute brightness centroid for gathering phase
         this.media.forceSample();
         let brightSumX = 0, brightSumY = 0, brightSum = 0;
         const cols = s.mediaGridColumns;
@@ -808,6 +806,9 @@ export class CirclesRenderer {
         this.mediaBrightCenterX = brightSum > 0.01 ? brightSumX / brightSum : w / 2;
         this.mediaBrightCenterY = brightSum > 0.01 ? brightSumY / brightSum : h / 2;
 
+        // Set per-particle mediaDelay:
+        // - Originals: small stagger so they start almost immediately
+        // - Extras: large delay so they only appear well after originals settle
         for (let i = 0; i < this.particles.length; i++) {
           const p = this.particles[i];
           const bright = this.media.getRawBrightness(
@@ -815,27 +816,33 @@ export class CirclesRenderer {
             Math.max(0, Math.min(1, p.mediaGridY / h))
           );
           if (i < this.baseParticleCount) {
-            p.mediaDelay = (1 - bright) * 0.4 + Math.random() * 0.1;
+            p.mediaDelay = (1 - bright) * 0.1 + Math.random() * 0.05;
           } else {
-            p.mediaDelay = 0.3 + (1 - bright) * 0.3 + Math.random() * 0.2;
+            // Extras wait until originals have fully settled
+            p.mediaDelay = 0.85 + (1 - bright) * 0.1 + Math.random() * 0.05;
           }
+          p.mediaBlendProgress = 0;
         }
       }
 
-      // Smooth global blend toward media intensity
+      // Global timer used to gate per-particle delays. Ramps slowly so
+      // originals (delay ~0-0.15) start first, extras (delay ~0.85+) start much later.
       if (mediaActive) {
-        const blendRate = this.mediaGridBlend < mediaFade ? dt * 1.5 : dt * 2.0;
-        this.mediaGridBlend += (mediaFade - this.mediaGridBlend) * Math.min(1, blendRate);
+        this.mediaGridBlend = Math.min(1, this.mediaGridBlend + dt * this.transitionTiming.gridBlendIn);
       } else {
-        this.mediaGridBlend += (0 - this.mediaGridBlend) * Math.min(1, dt * 1.5);
+        this.mediaGridBlend = Math.max(0, this.mediaGridBlend - dt * this.transitionTiming.gridBlendOut);
         if (this.mediaGridBlend < 0.005) {
           this.mediaGridBlend = 0;
+          // Check if all extras have shrunk away and all originals returned
           if (this.baseParticleCount > 0) {
-            let allShrunk = true;
+            let allDone = true;
             for (let ei = this.baseParticleCount; ei < this.particles.length; ei++) {
-              if (this.particles[ei].size > 0.5) { allShrunk = false; break; }
+              if (this.particles[ei].size > 0.5) { allDone = false; break; }
             }
-            if (allShrunk) {
+            for (let oi = 0; oi < this.baseParticleCount && allDone; oi++) {
+              if (this.particles[oi].mediaBlendProgress > 0.01) { allDone = false; break; }
+            }
+            if (allDone) {
               this.particles.length = Math.min(this.baseParticleCount, this.particles.length);
               this.rebuildSortOrder();
               this.baseParticleCount = 0;
@@ -848,15 +855,16 @@ export class CirclesRenderer {
       this.mediaGridBlend = 0;
     }
     this.prevMediaActive = mediaActive;
+    const tt = this.transitionTiming;
 
-    // Use a single blend factor for everything: size range, position, and brightness
-    // In grid mode, particles are already positioned -- just blend size with brightness
-    const mediaBlend = s.useGrid ? mediaFade : this.mediaGridBlend;
-
-    // Effective size range: interpolate between regular and grid sizes, scaled to viewport
-    const effectiveMinSize = (s.minSize + (s.gridMinSize - s.minSize) * mediaBlend) * vs;
-    const effectiveMaxSize = (s.maxSize + (s.gridMaxSize - s.maxSize) * mediaBlend) * vs;
+    // Normal size range (no global interpolation toward grid sizes -- that's per-particle)
+    const effectiveMinSize = s.minSize * vs;
+    const effectiveMaxSize = s.maxSize * vs;
     const sizeRange = effectiveMaxSize - effectiveMinSize;
+
+    // Grid size range for media animation
+    const gridEffMinSize = s.gridMinSize * vs;
+    const gridEffMaxSize = s.gridMaxSize * vs;
 
     // Wave direction vector
     const waveDirX = Math.cos(s.waveDirection);
@@ -888,118 +896,93 @@ export class CirclesRenderer {
       if (!p) continue;
 
       // ===== POSITION =====
-      // floatGridBlend: 1 = locked to grid, 0 = free-floating
-      const gridBlend = s.useGrid ? s.floatGridBlend : 0;
-      if (gridBlend > 0.001) {
-        // Grid mode (full or partial blend)
-        const looseness = 1 - gridBlend;
-        const jitterX = looseness > 0.01
-          ? this.noise3D(p.noiseOffsetX + 300, p.noiseOffsetY + 300, this.time * s.driftSpeed) * 30 * vs * looseness
-          : 0;
-        const jitterY = looseness > 0.01
-          ? this.noise3D(p.noiseOffsetX + 400, p.noiseOffsetY + 400, this.time * s.driftSpeed) * 30 * vs * looseness
-          : 0;
-        const gridTargetX = p.gridX + jitterX;
-        const gridTargetY = p.gridY + jitterY;
+      const gridBlend = s.useGrid ? Math.max(0, Math.min(1, s.floatGridBlend)) : 0;
+      const isExtraP = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
+      const inMediaGrid = this.baseParticleCount > 0;
 
-        // Also apply drift to homeX/homeY so particles have somewhere to go when grid releases
-        const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.time * s.driftSpeed);
-        const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.time * s.driftSpeed);
-        p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed * vs * looseness;
-        p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed * vs * looseness;
-
-        // Blend position between grid target and free home position
-        const targetX = gridTargetX * gridBlend + p.homeX * (1 - gridBlend);
-        const targetY = gridTargetY * gridBlend + p.homeY * (1 - gridBlend);
-        const lerpRate = dt * (8 * gridBlend + (0.6 + p.depth * 0.8) * (1 - gridBlend));
-        p.x += (targetX - p.x) * Math.min(1, lerpRate);
-        p.y += (targetY - p.y) * Math.min(1, lerpRate);
-        // Keep homeX/homeY close to current position so there's no jump when grid fully releases
-        if (gridBlend > 0.5) {
-          p.homeX = p.x;
-          p.homeY = p.y;
-        }
-      } else {
-        const isExtraP = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
-        const inMediaTransition = this.mediaGridBlend > 0.001 && this.baseParticleCount > 0;
-
-        // During media: freeze drift for original particles so they return to pre-media positions
-        if (!inMediaTransition || isExtraP) {
-          const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.time * s.driftSpeed);
-          const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.time * s.driftSpeed);
-          p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed * vs;
-          p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed * vs;
-
-          if (s.gravityShape !== 'none' && s.gravityStrength > 0.01 && this.mediaGridBlend < 0.01) {
-            const [bx, by] = this.focusBias(p.homeX, p.homeY, w, h, s.gravityShape);
-            const fStr = s.gravityStrength * 15 * dt;
-            p.homeX += bx * fStr * w;
-            p.homeY += by * fStr * h;
-          }
-
-          const softMargin = margin;
-          const hardMargin = margin + 150 * vs;
-          const sqLeft = -softMargin;
-          const sqRight = w + softMargin;
-          const sqTop = -softMargin;
-          const sqBottom = h + softMargin;
-          const hardLeft = -hardMargin;
-          const hardRight = w + hardMargin;
-          const hardTop = -hardMargin;
-          const hardBottom = h + hardMargin;
-          if (p.homeX < hardLeft) p.homeX = sqLeft;
-          else if (p.homeX > hardRight) p.homeX = sqRight;
-          if (p.homeY < hardTop) p.homeY = sqTop;
-          else if (p.homeY > hardBottom) p.homeY = sqBottom;
-          const pushStrength = 0.05;
-          if (p.homeX < sqLeft) p.homeX += (sqLeft - p.homeX + 1) * pushStrength;
-          if (p.homeX > sqRight) p.homeX -= (p.homeX - sqRight + 1) * pushStrength;
-          if (p.homeY < sqTop) p.homeY += (sqTop - p.homeY + 1) * pushStrength;
-          if (p.homeY > sqBottom) p.homeY -= (p.homeY - sqBottom + 1) * pushStrength;
-        } else {
-          // Original particle during media: pin homeX/Y to saved pre-media position
-          p.homeX = p.preMediaX;
-          p.homeY = p.preMediaY;
-        }
-
-        // Position: blend between pre-media position and grid cell during media
-        if (this.mediaGridBlend > 0.001) {
-          const rawBlend = this.mediaGridBlend;
-          const delayRange = 0.6;
-          const pBlend = Math.max(0, Math.min(1,
-            (rawBlend - p.mediaDelay * delayRange) / Math.max(0.01, 1 - p.mediaDelay * delayRange)
-          ));
-
-          if (isExtraP) {
-            p.x += (p.mediaGridX - p.x) * Math.min(1, dt * 8);
-            p.y += (p.mediaGridY - p.y) * Math.min(1, dt * 8);
-          } else if (pBlend < 0.001) {
-            // Not yet blending: gently drift toward brightness center (gathering)
-            const gatherRate = dt * 0.3;
-            const driftRate = dt * (0.6 + p.depth * 0.8);
-            p.x += (p.preMediaX - p.x) * Math.min(1, driftRate);
-            p.y += (p.preMediaY - p.y) * Math.min(1, driftRate);
-            p.x += (this.mediaBrightCenterX - p.x) * Math.min(1, gatherRate);
-            p.y += (this.mediaBrightCenterY - p.y) * Math.min(1, gatherRate);
-          } else {
-            // Gathering bias: early in blend, pull toward brightness center.
-            // As pBlend→1, target becomes the exact grid cell.
-            const gatherStrength = (1 - pBlend) * (1 - pBlend) * 0.5;
-            const biasedX = p.mediaGridX + (this.mediaBrightCenterX - p.mediaGridX) * gatherStrength;
-            const biasedY = p.mediaGridY + (this.mediaBrightCenterY - p.mediaGridY) * gatherStrength;
-            const targetX = p.preMediaX + (biasedX - p.preMediaX) * pBlend;
-            const targetY = p.preMediaY + (biasedY - p.preMediaY) * pBlend;
-            const lerpRate = dt * (2 + p.mediaSpeed * 2);
-            p.x += (targetX - p.x) * Math.min(1, lerpRate);
-            p.y += (targetY - p.y) * Math.min(1, lerpRate);
+      // --- Per-particle media blend progress ---
+      // Used for size blending. Position is handled by target-based lerp below.
+      let pBlend = 0;
+      if (inMediaGrid) {
+        if (mediaActive) {
+          if (this.mediaGridBlend > p.mediaDelay) {
+            const speed = (1.5 + (p.mediaSpeed || 1) * 0.6) * tt.enterSpeed;
+            p.mediaBlendProgress = Math.min(1, p.mediaBlendProgress + dt * speed);
           }
         } else {
-          // Normal mode: follow home position with drift
-          const driftLerp = dt * (0.6 + p.depth * 0.8);
-          p.x += (p.homeX - p.x) * Math.min(1, driftLerp);
-          p.y += (p.homeY - p.y) * Math.min(1, driftLerp);
+          const speed = (isExtraP ? 3.5 : 0.8) * tt.exitSpeed;
+          p.mediaBlendProgress = Math.max(0, p.mediaBlendProgress - dt * speed);
         }
+        const t = p.mediaBlendProgress;
+        pBlend = t * t * (3 - 2 * t);
       }
+
+      // --- Always update homeX/homeY with drift ---
+      // Even during media, keep drifting so the "return destination" stays organic
+      const driftNx = this.noise3D(p.noiseOffsetX + 500, p.noiseOffsetY + 500, this.time * s.driftSpeed);
+      const driftNy = this.noise3D(p.noiseOffsetX + 600, p.noiseOffsetY + 600, this.time * s.driftSpeed);
+      p.homeX += driftNx * dt * s.driftStrength * s.animationSpeed * vs;
+      p.homeY += driftNy * dt * s.driftStrength * s.animationSpeed * vs;
+
+      if (s.gravityShape !== 'none' && s.gravityStrength > 0.01 && !(inMediaGrid && pBlend > 0.5)) {
+        const [bx, by] = this.focusBias(p.homeX, p.homeY, w, h, s.gravityShape);
+        p.homeX += bx * s.gravityStrength * 15 * dt * w;
+        p.homeY += by * s.gravityStrength * 15 * dt * h;
+      }
+
+      const softMargin = margin;
+      const hardMargin = margin + 150 * vs;
+      if (p.homeX < -hardMargin) p.homeX = -softMargin;
+      else if (p.homeX > w + hardMargin) p.homeX = w + softMargin;
+      if (p.homeY < -hardMargin) p.homeY = -softMargin;
+      else if (p.homeY > h + hardMargin) p.homeY = h + softMargin;
+      const pushStr = 0.05;
+      if (p.homeX < -softMargin) p.homeX += (-softMargin - p.homeX + 1) * pushStr;
+      if (p.homeX > w + softMargin) p.homeX -= (p.homeX - w - softMargin + 1) * pushStr;
+      if (p.homeY < -softMargin) p.homeY += (-softMargin - p.homeY + 1) * pushStr;
+      if (p.homeY > h + softMargin) p.homeY -= (p.homeY - h - softMargin + 1) * pushStr;
+
+      // --- Compute position target + lerp (like intro circle exit) ---
+      // Instead of directly setting p.x/y, we compute a target and lerp toward it.
+      // This gives the same organic feel as the intro->normal transition.
+      let targetX: number;
+      let targetY: number;
+      let posSpeed: number;
+
+      if (inMediaGrid && isExtraP) {
+        targetX = p.mediaGridX;
+        targetY = p.mediaGridY;
+        posSpeed = 5 * tt.enterSpeed;
+      } else if (inMediaGrid && mediaActive && p.mediaBlendProgress > 0.001) {
+        targetX = p.mediaGridX;
+        targetY = p.mediaGridY;
+        posSpeed = (2 + p.mediaBlendProgress * 3) * tt.enterSpeed;
+      } else if (inMediaGrid && !mediaActive && p.mediaBlendProgress > 0.001) {
+        targetX = p.homeX;
+        targetY = p.homeY;
+        posSpeed = (1.5 + (1 - p.mediaBlendProgress) * 1.5) * tt.exitSpeed;
+      } else {
+        // Normal mode or fully returned
+        targetX = p.homeX;
+        targetY = p.homeY;
+
+        if (gridBlend > 0.001) {
+          const looseness = 1 - gridBlend;
+          const jitterX = looseness > 0.01
+            ? this.noise3D(p.noiseOffsetX + 300, p.noiseOffsetY + 300, this.time * s.driftSpeed) * 30 * vs * looseness
+            : 0;
+          const jitterY = looseness > 0.01
+            ? this.noise3D(p.noiseOffsetX + 400, p.noiseOffsetY + 400, this.time * s.driftSpeed) * 30 * vs * looseness
+            : 0;
+          targetX = targetX * (1 - gridBlend) + (p.gridX + jitterX) * gridBlend;
+          targetY = targetY * (1 - gridBlend) + (p.gridY + jitterY) * gridBlend;
+        }
+
+        posSpeed = 0.6 + p.depth * 0.8;
+      }
+
+      p.x += (targetX - p.x) * Math.min(1, dt * posSpeed);
+      p.y += (targetY - p.y) * Math.min(1, dt * posSpeed);
 
       // ===== CURSOR INTERACTION (disabled during grid formation) =====
       if (this.cursorDown && this.mediaGridBlend < 0.01) {
@@ -1082,43 +1065,23 @@ export class CirclesRenderer {
       sizeMod = Math.max(0, Math.min(1, sizeMod));
       const patternSize = effectiveMinSize + sizeMod * sizeRange;
 
-      // Use unfaded brightness for sizing -- fade timing is handled by pSizeBlend,
-      // not by fadeProgress. This prevents double-fade and dots disappearing.
+      // Media brightness-driven size (using grid size range, not normal range)
       const mediaBright = this.media.getUnfadedBrightness(
         Math.max(0, Math.min(1, p.x / w)),
         Math.max(0, Math.min(1, p.y / h))
       );
-      const gridCellSize = effectiveMaxSize * 0.5;
+      const gridCellSize = gridEffMaxSize * 0.5;
       const mediaSize = mediaBright * gridCellSize;
 
-      const isExtra = this.baseParticleCount > 0 && pi >= this.baseParticleCount;
-      const delayRange = 0.6;
-      let pSizeBlend: number;
-      if (mediaBlend > 0.001) {
-        if (this.media.intensity > 0.01) {
-          pSizeBlend = Math.max(0, Math.min(1,
-            (mediaBlend - p.mediaDelay * delayRange) / Math.max(0.01, 1 - p.mediaDelay * delayRange)
-          ));
-        } else {
-          const invertedDelay = 1 - p.mediaDelay;
-          pSizeBlend = Math.max(0, Math.min(1,
-            (mediaBlend - invertedDelay * delayRange) / Math.max(0.01, 1 - invertedDelay * delayRange)
-          ));
-        }
-      } else {
-        pSizeBlend = 0;
-      }
-
       let blendedSize: number;
-      if (isExtra) {
-        // Extras: blend from 0 to mediaSize (never inherit patternSize)
-        blendedSize = pSizeBlend > 0.001 ? mediaSize * pSizeBlend : 0;
-      } else if (pSizeBlend < 0.001) {
-        blendedSize = patternSize;
+      if (isExtraP) {
+        // Extras: scale from 0 to mediaSize based on their blend progress
+        blendedSize = pBlend > 0.001 ? mediaSize * pBlend : 0;
+      } else if (pBlend > 0.001) {
+        // Originals in media: crossfade from pattern size to media size
+        blendedSize = patternSize * (1 - pBlend) + mediaSize * pBlend;
       } else {
-        // Originals: crossfade from patternSize to mediaSize.
-        // Dark cells (mediaSize≈0) cause the dot to shrink away smoothly.
-        blendedSize = patternSize * (1 - pSizeBlend) + mediaSize * pSizeBlend;
+        blendedSize = patternSize;
       }
 
       // Per-particle note pulse
@@ -1131,20 +1094,15 @@ export class CirclesRenderer {
       p.targetSize = blendedSize * burstSizeMult * musicMult * noteMult;
       p.targetSize = Math.max(0, Math.min(effectiveMaxSize * 2.5, p.targetSize));
 
-      // Edge vignette only during media animation (to soften sharp video edges)
-      if (mediaBlend > 0.01) {
-        const eFade = this.edgeSizeFade(p.x, p.y, w, h);
-        p.targetSize *= 1 - mediaBlend + mediaBlend * eFade;
-      }
-
-      // Size lerp: extras grow very slowly, shrink fast; regular particles moderate
+      // Size lerp speed
       const isGrowing = p.targetSize > p.size;
       let sizeLerp: number;
-      if (isExtra) {
-        sizeLerp = isGrowing ? dt * 0.5 : dt * 5;
-      } else if (pSizeBlend > 0.01) {
-        // During media: grow slowly (staggered reveal), shrink moderately
-        sizeLerp = isGrowing ? dt * 1.5 : dt * 3;
+      if (isExtraP) {
+        // Extras: grow in gently, shrink fast when leaving
+        sizeLerp = isGrowing ? dt * 2 : dt * 5;
+      } else if (pBlend > 0.01) {
+        // Originals during media: smooth transition both ways
+        sizeLerp = dt * 4;
       } else {
         sizeLerp = isGrowing ? dt * 5 : dt * 3;
       }

@@ -107,6 +107,12 @@ export const defaultAppState: AppState = {
   hiddenMedia: [],
   mediaGridColumns: 40,
   transitionSpeed: 0.15,
+  transitionTiming: {
+    enterSpeed: 1.0,
+    exitSpeed: 1.0,
+    gridBlendIn: 0.8,
+    gridBlendOut: 0.8,
+  },
   soundMuted: false,
   music: defaultMusicConfig,
 };
@@ -120,6 +126,7 @@ export function computeVersionHash(state: AppState): string {
     hiddenMedia: state.hiddenMedia,
     mediaGridColumns: state.mediaGridColumns,
     transitionSpeed: state.transitionSpeed,
+    transitionTiming: state.transitionTiming,
     music: state.music,
   });
   let hash = 0;
@@ -192,6 +199,9 @@ export function loadAppState(): AppState {
       // Ensure hiddenMedia and mediaOrder exist
       if (!merged.hiddenMedia) merged.hiddenMedia = [];
       if (!merged.mediaOrder) merged.mediaOrder = [];
+      if (!merged.transitionTiming) {
+        merged.transitionTiming = { enterSpeed: 1.0, exitSpeed: 1.0, gridBlendIn: 0.8, gridBlendOut: 0.8 };
+      }
 
       return merged;
     }
@@ -376,7 +386,7 @@ function migrateOldState(): AppState {
     if (oldOverrides) {
       const ov = JSON.parse(oldOverrides) as Record<string, { playMode: MediaPlayMode; invert: boolean }>;
       for (const [src, data] of Object.entries(ov)) {
-        state.mediaOverrides[src] = { ...data, intensity: 0.7, contrast: 0 };
+        state.mediaOverrides[src] = { ...data, intensity: 0.7, contrast: 0, zoomToFit: false };
       }
     }
   } catch { /* ignore migration errors */ }
@@ -393,5 +403,7 @@ function migrateOldState(): AppState {
 }
 
 export function getMediaOverride(state: AppState, src: string): MediaOverride {
-  return state.mediaOverrides[src] || { playMode: 'loop', invert: false, intensity: 0.7, contrast: 0 };
+  const ov = state.mediaOverrides[src];
+  if (!ov) return { playMode: 'loop', invert: false, intensity: 0.7, contrast: 0, zoomToFit: false };
+  return { playMode: ov.playMode, invert: ov.invert, intensity: ov.intensity, contrast: ov.contrast, zoomToFit: ov.zoomToFit ?? false };
 }

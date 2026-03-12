@@ -54,12 +54,6 @@
     "invert": false
   },
   {
-    "src": "/media/dust-scatter.mp4",
-    "type": "video",
-    "playMode": "loop",
-    "invert": false
-  },
-  {
     "src": "/media/glowing-liquid.mp4",
     "type": "video",
     "playMode": "loop",

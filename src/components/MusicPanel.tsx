@@ -157,7 +157,7 @@ function ChoiceButtons<T extends string | number>({ value, onChange, options, ac
           <button
             key={String(option.value)}
             onClick={() => onChange(option.value)}
-            className="rounded text-[10px] uppercase tracking-wide font-medium transition-colors cursor-pointer"
+            className="text-[10px] uppercase tracking-wide font-medium transition-colors cursor-pointer"
             style={{
               padding: '4px 6px',
               background: active ? accent : 'rgba(255,255,255,0.06)',
@@ -181,7 +181,7 @@ function ToggleChip({ enabled, onToggle, accent }: {
   return (
     <button
       onClick={() => onToggle(!enabled)}
-      className="rounded text-[10px] uppercase tracking-widest font-medium cursor-pointer transition-colors"
+      className="text-[10px] uppercase tracking-widest font-medium cursor-pointer transition-colors"
       style={{
         padding: '3px 7px',
         background: enabled ? accent : 'rgba(255,255,255,0.06)',
@@ -211,9 +211,9 @@ function Card({ title, accent, children, collapsed, onToggle, action }: {
       style={{
         padding: '6px 8px',
         gap: 4,
-        background: 'rgba(255,255,255,0.025)',
-        borderRadius: 4,
-        border: '1px solid rgba(255,255,255,0.05)',
+        background: 'rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255,255,255,0.08)',
       }}
     >
       <div className="flex items-center gap-2">
@@ -246,9 +246,9 @@ function AutoSection({ accent, children }: { accent: string; children: React.Rea
         padding: '4px 6px',
         gap: 3,
         marginTop: 2,
-        borderRadius: 4,
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.05)',
+        background: 'rgba(0,0,0,0.25)',
+        backdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.06)',
       }}
     >
       <button onClick={() => setCollapsed((value) => !value)} className="flex items-center gap-2 cursor-pointer text-left">
@@ -323,7 +323,6 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
   const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
   const resizing = useRef(false);
 
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [plingOpen, setPlingOpen] = useState(true);
   const [plongOpen, setPlongOpen] = useState(false);
   const [bongOpen, setBongOpen] = useState(false);
@@ -401,39 +400,19 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
   return (
     <div
       className={`fixed z-50 transition-all duration-300 ${visible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8 pointer-events-none'}`}
-      style={{ top: 16, left: 16, bottom: panelCollapsed ? 'auto' : 16, width: panelWidth, maxWidth: 'calc(100vw - 460px)' }}
+      style={{ top: 16, left: 16, bottom: 16, width: panelWidth, maxWidth: 'calc(100vw - 460px)' }}
     >
       <div
         data-testid="music-panel-shell"
         data-panel-style="companion-rack"
-        className={`relative ${panelCollapsed ? '' : 'h-full overflow-y-auto overflow-x-hidden'}`}
+        className="relative h-full overflow-y-auto overflow-x-hidden"
         style={{
-          borderRadius: 6,
-          background: 'rgba(0,0,0,0.28)',
-          backdropFilter: 'blur(24px)',
-          border: '1px solid rgba(255,255,255,0.06)',
+          background: 'none',
           scrollbarWidth: 'thin',
           scrollbarColor: 'rgba(255,255,255,0.08) transparent',
         }}
       >
         <div className="flex flex-col" style={{ padding: '10px 10px', gap: 5 }}>
-          {/* Header -- click to collapse/expand entire panel */}
-          <button
-            onClick={() => setPanelCollapsed(v => !v)}
-            className="flex items-center justify-between cursor-pointer text-left w-full"
-            style={{ padding: '2px 2px 6px', borderBottom: panelCollapsed ? 'none' : '1px solid rgba(255,255,255,0.06)' }}
-          >
-            <div className="flex items-center" style={{ gap: 6 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 700, letterSpacing: 2, color: 'rgba(255,255,255,0.8)' }}>SYNTH</h2>
-              <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.2)' }}>{panelCollapsed ? '▸' : '▾'}</span>
-            </div>
-            <div style={{ fontSize: 12, fontFamily: 'monospace', fontVariantNumeric: 'tabular-nums', color: 'rgba(255,255,255,0.5)' }}>
-              {music.tempo} <span style={{ fontSize: 8, color: 'rgba(255,255,255,0.25)' }}>BPM</span>
-            </div>
-          </button>
-
-          {!panelCollapsed && (
-            <>
               <Card title="Global" accent={SECTION_ACCENTS.global}>
                 <ChoiceButtons
                   value={music.scale}
@@ -535,16 +514,12 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
                 <Slider label="Pulse" value={music.visualReactions.sizePulseStrength} min={0} max={1} step={0.05} onChange={(value) => setVR('sizePulseStrength', value)} color={SECTION_ACCENTS.vr} />
                 <Slider label="Bass" value={music.visualReactions.bassSizeBoost} min={0} max={1} step={0.05} onChange={(value) => setVR('bassSizeBoost', value)} color={SECTION_ACCENTS.vr} />
               </Card>
-            </>
-          )}
         </div>
       </div>
 
-      {!panelCollapsed && (
-        <div className="absolute top-0 bottom-0 z-20" style={{ right: -4, width: 10 }} onPointerDown={startResize}>
-          <GripDots />
-        </div>
-      )}
+      <div className="absolute top-0 bottom-0 z-20" style={{ right: -4, width: 10 }} onPointerDown={startResize}>
+        <GripDots />
+      </div>
     </div>
   );
 }

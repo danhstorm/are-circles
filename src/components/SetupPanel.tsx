@@ -121,7 +121,6 @@ function Section({ title, children, collapsed, onToggle }: {
     <div className="flex flex-col gap-1" style={{
       padding: '8px 10px',
       background: 'rgba(255,255,255,0.025)',
-      borderRadius: 4,
       border: '1px solid rgba(255,255,255,0.05)',
     }}>
       {isCollapsible ? (
@@ -139,12 +138,12 @@ function Section({ title, children, collapsed, onToggle }: {
 
 function ModeToggle({ mode, onSetMode }: { mode: 'live' | 'setup'; onSetMode: (m: 'live' | 'setup') => void }) {
   return (
-    <div className="flex bg-white/5 rounded p-0.5" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
+    <div className="flex bg-white/5 p-0.5" style={{ border: '1px solid rgba(255,255,255,0.06)' }}>
       {(['live', 'setup'] as const).map(m => (
         <button
           key={m}
           onClick={() => onSetMode(m)}
-          className={`flex-1 text-xs font-medium tracking-widest uppercase cursor-pointer transition-all rounded-sm ${
+          className={`flex-1 text-xs font-medium tracking-widest uppercase cursor-pointer transition-all ${
             mode === m ? 'bg-white/12 text-white/90 shadow-sm' : 'text-white/30 hover:text-white/50'
           }`}
           style={{ padding: '4px 10px' }}
@@ -178,7 +177,6 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
       style={{ top: 16, right: 16, width: 300 }}
     >
       <div style={{
-        borderRadius: 6,
         background: 'rgba(0,0,0,0.28)',
         backdropFilter: 'blur(24px)',
         border: '1px solid rgba(255,255,255,0.06)',
@@ -188,24 +186,24 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
           <div className="flex items-center justify-between">
             <ModeToggle mode="live" onSetMode={onSetMode} />
             <button onClick={onClose}
-              className="w-6 h-6 rounded-full bg-white/8 hover:bg-white/15 flex items-center justify-center text-white/40 text-xs cursor-pointer"
+              className="w-6 h-6 bg-white/8 hover:bg-white/15 flex items-center justify-center text-white/40 text-xs cursor-pointer"
               aria-label="Close">&times;</button>
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 pt-2">
             {(['Presentation', 'Background', 'Mood'] as const).map((label, i) => (
               <button key={i} onClick={() => onApplyPreset(i)}
-                className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-lg transition-all cursor-pointer ${
+                className={`flex flex-col items-center gap-1.5 py-3 px-2 transition-all cursor-pointer ${
                   appState.activePreset === i
                     ? 'bg-white/15 text-white border border-white/20'
                     : 'bg-white/5 hover:bg-white/10 text-white/40 border border-transparent'
                 }`}>
                 {sceneIcons[i] || sceneIcons[0]}
-                <span className="text-[11px] leading-none">{label}</span>
+                <span className="text-[11px] leading-none">{label} ({i + 1})</span>
               </button>
             ))}
           </div>
           <button onClick={onToggleSound}
-            className={`w-full py-2 text-[11px] rounded transition-all cursor-pointer flex items-center justify-center gap-2 ${
+            className={`w-full py-2 text-[11px] transition-all cursor-pointer flex items-center justify-center gap-2 ${
               soundActive
                 ? 'bg-white/12 text-white/80 border border-white/15'
                 : 'bg-white/5 text-white/35 border border-transparent hover:bg-white/8'
@@ -215,7 +213,7 @@ function LiveCard({ visible, appState, onApplyPreset, onSetMode, onClose, soundM
               {soundActive ? <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" /> : <path d="M17 9l6 6M23 9l-6 6" />}
             </svg>
             <span>Sound {soundActive ? 'On' : 'Off'}</span>
-            <span className="text-[9px] text-white/20 ml-1">S</span>
+            <span className="text-[9px] text-white/20 ml-1">(S)</span>
           </button>
         </div>
       </div>
@@ -227,6 +225,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [colorsOpen, setColorsOpen] = useState(false);
+  const [transitionsOpen, setTransitionsOpen] = useState(false);
   const [audioOpen, setAudioOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<number>(() => {
     const scene = appState.scenes[editingPreset];
@@ -278,6 +277,13 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
 
   const setGlobal = (key: 'mediaGridColumns' | 'transitionSpeed', value: number) => {
     onUpdate(prev => ({ ...prev, [key]: value }));
+  };
+
+  const setTiming = (key: string, value: number) => {
+    onUpdate(prev => ({
+      ...prev,
+      transitionTiming: { ...prev.transitionTiming, [key]: value },
+    }));
   };
 
   const setColor = (key: string, value: string | string[] | number) => {
@@ -365,7 +371,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
     setResetting(false);
   };
 
-  const setMediaOverrideProp = (src: string, prop: string, value: number) => {
+  const setMediaOverrideProp = (src: string, prop: string, value: number | boolean) => {
     onUpdate(prev => ({
       ...prev,
       mediaOverrides: {
@@ -396,7 +402,6 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
         data-panel-style="companion-rack"
         className="h-full overflow-y-auto"
         style={{
-          borderRadius: 6,
           background: 'rgba(0,0,0,0.28)',
           backdropFilter: 'blur(24px)',
           border: '1px solid rgba(255,255,255,0.06)',
@@ -408,10 +413,10 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
           <div className="flex justify-between items-center">
             <ModeToggle mode={mode} onSetMode={onSetMode} />
             <div className="flex items-center gap-2">
-              <span className="text-white/15 text-[10px] hidden sm:inline">H</span>
+              <span className="text-white/15 text-[10px] hidden sm:inline">(H)</span>
               <button
                 onClick={onClose}
-                className="w-6 h-6 rounded-full bg-white/8 hover:bg-white/15 flex items-center justify-center text-white/40 text-xs cursor-pointer"
+                className="w-6 h-6 bg-white/8 hover:bg-white/15 flex items-center justify-center text-white/40 text-xs cursor-pointer"
                 aria-label="Close"
               >
                 &times;
@@ -423,14 +428,14 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
             <button
               onClick={handleResetToDefaults}
               disabled={resetting}
-              className="flex-1 py-1 text-[10px] rounded bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
+              className="flex-1 py-1 text-[10px] bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
             >
               {resetting ? 'Resetting...' : 'Reset to Defaults'}
             </button>
             <button
               onClick={handleSaveAsDefaults}
               disabled={saving}
-              className="flex-1 py-1 text-[10px] rounded bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
+              className="flex-1 py-1 text-[10px] bg-white/6 hover:bg-white/12 text-white/50 cursor-pointer disabled:opacity-30"
             >
               {saving ? 'Saving...' : 'Save as Defaults'}
             </button>
@@ -442,7 +447,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                 <button
                   key={i}
                   onClick={() => onSetEditingPreset(i)}
-                  className={`py-1.5 text-[11px] rounded transition-colors cursor-pointer ${
+                  className={`py-1.5 text-[11px] transition-colors cursor-pointer ${
                     editingPreset === i ? 'bg-white/18 text-white border border-white/25' : 'bg-white/6 hover:bg-white/12 text-white/60'
                   }`}
                 >
@@ -463,7 +468,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                 const enabled = (preset.presetTemplates || []).includes(i);
                 const editing = selectedTemplate === i;
                 return (
-                  <div key={i} className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${editing ? 'bg-white/12 ring-1 ring-white/20' : ''}`}>
+                  <div key={i} className={`flex items-center gap-1.5 px-1.5 py-0.5 transition-colors ${editing ? 'bg-white/12 ring-1 ring-white/20' : ''}`}>
                     <input
                       type="checkbox"
                       checked={enabled}
@@ -498,7 +503,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                       return { ...prev, customPresets: cp };
                     });
                   }}
-                  className="flex-1 text-[11px] px-2 py-1 rounded bg-white/8 text-white/80 border border-white/10 outline-none min-w-0"
+                  className="flex-1 text-[11px] px-2 py-1 bg-white/8 text-white/80 border border-white/10 outline-none min-w-0"
                 />
                 <button
                   onClick={() => {
@@ -508,7 +513,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                       return { ...prev, customPresets: cp };
                     });
                   }}
-                  className="text-[9px] px-1.5 py-1 rounded bg-white/6 hover:bg-white/12 text-white/35 cursor-pointer shrink-0"
+                  className="text-[9px] px-1.5 py-1 bg-white/6 hover:bg-white/12 text-white/35 cursor-pointer shrink-0"
                   title="Reset this preset to factory default"
                 >
                   Reset
@@ -547,7 +552,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                         setDragIdx(null);
                         setDragOverIdx(null);
                       }}
-                      className={`flex items-center gap-1.5 px-1.5 py-1 rounded text-[10px] cursor-grab active:cursor-grabbing transition-colors ${
+                      className={`flex items-center gap-1.5 px-1.5 py-1 text-[10px] cursor-grab active:cursor-grabbing transition-colors ${
                         dragOverIdx === pos && dragIdx !== pos
                           ? 'bg-white/15 border border-white/25'
                           : dragIdx === pos
@@ -634,7 +639,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                   <button
                     key={shape}
                     onClick={() => setPresetSetting('gravityShape', shape)}
-                    className={`flex-1 px-1.5 py-1 text-[11px] rounded transition-colors cursor-pointer capitalize ${
+                    className={`flex-1 px-1.5 py-1 text-[11px] transition-colors cursor-pointer capitalize ${
                       (ps.gravityShape ?? 'none') === shape ? 'bg-white/15 text-white border border-white/25' : 'bg-white/5 hover:bg-white/10 text-white/50'
                     }`}
                   >
@@ -666,7 +671,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                       key={item.src}
                       className={`relative group flex flex-col gap-1 transition-opacity ${
                         mediaDragIdx === i ? 'opacity-40' : ''
-                      } ${mediaDragOverIdx === i && mediaDragIdx !== i ? 'ring-1 ring-white/30 rounded' : ''}`}
+                      } ${mediaDragOverIdx === i && mediaDragIdx !== i ? 'ring-1 ring-white/30' : ''}`}
                       draggable
                       onDragStart={(e) => {
                         setMediaDragIdx(i);
@@ -695,7 +700,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                     >
                       <button
                         onClick={() => onTriggerMediaByIndex(i)}
-                        className={`w-full aspect-square rounded overflow-hidden bg-black/30 border transition-colors cursor-pointer ${
+                        className={`w-full aspect-square overflow-hidden bg-black/30 border transition-colors cursor-pointer ${
                           activeMediaIndex === i ? 'border-white/50 ring-1 ring-white/25' : 'border-white/8 hover:border-white/20'
                         }`}
                         title={name}
@@ -709,15 +714,16 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
                           style={{ filter: `grayscale(1) brightness(${1 + (ov.intensity - 0.7)}) contrast(${1 + (ov.contrast ?? 0) * 3})${item.invert ? ' invert(1)' : ''}` }}
                         />
                       </button>
-                      <span className="absolute top-0.5 left-0.5 text-[8px] text-white/30 bg-black/40 rounded px-0.5 leading-tight select-none">{i + 1}</span>
+                      <span className="absolute top-0.5 left-0.5 text-[8px] text-white/30 bg-black/40 px-0.5 leading-tight select-none">{i + 1}</span>
                       {confirmDelete === i ? (
                         <button onClick={() => { setConfirmDelete(null); clearTimeout(confirmTimer.current); onRemoveMedia(i); }} className="absolute -top-1 -right-1 px-1 h-4 rounded-full bg-red-600 hover:bg-red-500 text-white text-[8px] font-medium flex items-center justify-center cursor-pointer z-10">Delete</button>
                       ) : (
                         <button onClick={() => { setConfirmDelete(i); clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmDelete(null), 3000); }} className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500/70 hover:bg-red-500 text-white text-[9px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title="Remove">&times;</button>
                       )}
                       <div className="flex gap-0.5">
-                        <button onClick={() => onUpdateMediaItem(i, { ...item, playMode: item.playMode === 'loop' ? 'pingpong' : 'loop' })} className="text-[8px] px-0.5 rounded bg-white/6 hover:bg-white/12 text-white/35 cursor-pointer" title={item.playMode === 'loop' ? 'Loop' : 'Ping-pong'}>{item.playMode === 'loop' ? '↻' : '↔'}</button>
-                        <button onClick={() => onUpdateMediaItem(i, { ...item, invert: !item.invert })} className={`text-[8px] px-0.5 rounded cursor-pointer ${item.invert ? 'bg-white/15 text-white/65' : 'bg-white/6 hover:bg-white/12 text-white/35'}`} title="Invert">inv</button>
+                        <button onClick={() => onUpdateMediaItem(i, { ...item, playMode: item.playMode === 'loop' ? 'pingpong' : 'loop' })} className="text-[8px] px-0.5 bg-white/6 hover:bg-white/12 text-white/35 cursor-pointer" title={item.playMode === 'loop' ? 'Loop' : 'Ping-pong'}>{item.playMode === 'loop' ? '↻' : '↔'}</button>
+                        <button onClick={() => onUpdateMediaItem(i, { ...item, invert: !item.invert })} className={`text-[8px] px-0.5 cursor-pointer ${item.invert ? 'bg-white/15 text-white/65' : 'bg-white/6 hover:bg-white/12 text-white/35'}`} title="Invert">inv</button>
+                        <button onClick={() => setMediaOverrideProp(item.src, 'zoomToFit', !(ov.zoomToFit ?? false))} className={`text-[8px] px-0.5 cursor-pointer ${ov.zoomToFit ? 'bg-white/15 text-white/65' : 'bg-white/6 hover:bg-white/12 text-white/35'}`} title="Zoom to fit (cover)">fill</button>
                       </div>
                       <Slider label="Int" value={ov.intensity} min={0} max={1.5} step={0.05} onChange={v => setMediaOverrideProp(item.src, 'intensity', v)} />
                       <Slider label="Lvl" value={ov.contrast ?? 0} min={0} max={0.8} step={0.05} onChange={v => setMediaOverrideProp(item.src, 'contrast', v)} />
@@ -729,7 +735,7 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
           </Section>
 
           <Section title="Audio" collapsed={!audioOpen} onToggle={() => setAudioOpen(!audioOpen)}>
-            <button onClick={onToggleAudio} className={`px-2 py-1 text-[11px] rounded transition-colors cursor-pointer ${audioActive ? 'bg-green-600/25 text-green-300 border border-green-500/25' : 'bg-white/6 text-white/45'}`}>
+            <button onClick={onToggleAudio} className={`px-2 py-1 text-[11px] transition-colors cursor-pointer ${audioActive ? 'bg-green-600/25 text-green-300 border border-green-500/25' : 'bg-white/6 text-white/45'}`}>
               {audioActive ? 'Mic Active' : 'Enable Mic'}
             </button>
             <div className="grid grid-cols-2 gap-x-4">
@@ -740,13 +746,20 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
             </div>
           </Section>
 
+          <Section title="Transitions" collapsed={!transitionsOpen} onToggle={() => setTransitionsOpen(!transitionsOpen)}>
+            <Slider label="Enter Speed" value={appState.transitionTiming?.enterSpeed ?? 1} min={0.1} max={3} step={0.05} onChange={v => setTiming('enterSpeed', v)} />
+            <Slider label="Exit Speed" value={appState.transitionTiming?.exitSpeed ?? 1} min={0.1} max={3} step={0.05} onChange={v => setTiming('exitSpeed', v)} />
+            <Slider label="Grid Blend In" value={appState.transitionTiming?.gridBlendIn ?? 0.8} min={0.1} max={3} step={0.05} onChange={v => setTiming('gridBlendIn', v)} />
+            <Slider label="Grid Blend Out" value={appState.transitionTiming?.gridBlendOut ?? 0.8} min={0.1} max={3} step={0.05} onChange={v => setTiming('gridBlendOut', v)} />
+          </Section>
+
           <Section title="Colors (Global)" collapsed={!colorsOpen} onToggle={() => setColorsOpen(!colorsOpen)}>
             <div className="flex items-center gap-3">
               <span className="text-[11px] text-white/55">BG</span>
-              <input type="color" value={appState.globalColors.backgroundColor} onChange={e => setColor('backgroundColor', e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent" />
+              <input type="color" value={appState.globalColors.backgroundColor} onChange={e => setColor('backgroundColor', e.target.value)} className="w-6 h-6 border-0 cursor-pointer bg-transparent" />
               <span className="text-[11px] text-white/55 ml-2">Palette</span>
               {appState.globalColors.paletteColors.map((c, i) => (
-                <input key={i} type="color" value={c} onChange={e => setPaletteColor(i, e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer bg-transparent" />
+                <input key={i} type="color" value={c} onChange={e => setPaletteColor(i, e.target.value)} className="w-6 h-6 border-0 cursor-pointer bg-transparent" />
               ))}
             </div>
             <Slider label="Hue Variation" value={appState.globalColors.hueVariation} min={0} max={60} step={1} onChange={v => setColor('hueVariation', v)} />

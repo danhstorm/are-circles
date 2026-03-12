@@ -11,7 +11,7 @@ export class MediaEngine {
   private sampleWidth = 64;
   private sampleHeight = 64;
   private fadeProgress = 0;
-  private fadeDirection: 'in' | 'out' | 'hold' | 'idle' = 'idle';
+  private fadeDirection: 'in' | 'out' | 'hold' | 'idle' | 'retained' = 'idle';
   private fadeDuration = 2.5;
   private holdTimer = 0;
   private holdDuration = 8;
@@ -26,6 +26,8 @@ export class MediaEngine {
   private intensityMap: Map<string, number> = new Map();
   private contrastMap: Map<string, number> = new Map();
   private invertMap: Map<string, boolean> = new Map();
+  private zoomToFitMap: Map<string, boolean> = new Map();
+  private retainVideo = false;
 
   get intensity() {
     return this.fadeProgress;
@@ -88,6 +90,17 @@ export class MediaEngine {
     }
   }
 
+  setRetainVideo(v: boolean) {
+    this.retainVideo = v;
+  }
+
+  setZoomToFitMap(map: Record<string, boolean>) {
+    this.zoomToFitMap.clear();
+    for (const [src, val] of Object.entries(map)) {
+      this.zoomToFitMap.set(src, val);
+    }
+  }
+
   private getCurrentIntensity(): number {
     if (!this.currentItem) return 0.7;
     return this.intensityMap.get(this.currentItem.src) ?? 0.7;
@@ -101,6 +114,11 @@ export class MediaEngine {
   private getCurrentInvert(): boolean {
     if (!this.currentItem) return false;
     return this.invertMap.get(this.currentItem.src) ?? false;
+  }
+
+  private getCurrentZoomToFit(): boolean {
+    if (!this.currentItem) return false;
+    return this.zoomToFitMap.get(this.currentItem.src) ?? false;
   }
 
   triggerNext() {
@@ -167,10 +185,13 @@ export class MediaEngine {
           this.pingpongReverse = true;
           this.pingpongTime = v.duration;
           v.currentTime = v.duration - 0.01;
-          v.playbackRate = -1;
-          v.play().catch(() => {
+          try {
+            v.playbackRate = -1;
+            v.play().catch(() => { v.pause(); });
+          } catch {
+            // Browser doesn't support negative playbackRate; manual seeking fallback
             v.pause();
-          });
+          }
         }
       };
     } else {
@@ -212,8 +233,67 @@ export class MediaEngine {
   private sampleBrightness() {
     if (!this.videoEl || this.videoEl.readyState < 2) return;
 
+    const vw = this.videoEl.videoWidth;
+    const vh = this.videoEl.videoHeight;
+    if (vw === 0 || vh === 0) return;
+
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+    const viewportAspect = viewW / viewH;
+    const zoomToFit = this.getCurrentZoomToFit();
+
+    let sx: number, sy: number, sw: number, sh: number;
+    let dx = 0, dy = 0, dw = this.sampleWidth, dh = this.sampleHeight;
+
+    if (zoomToFit) {
+      // Full cover crop: fill viewport completely, crop excess from center
+      const videoAspect = vw / vh;
+      sx = 0; sy = 0; sw = vw; sh = vh;
+      if (videoAspect > viewportAspect) {
+        sw = vh * viewportAspect;
+        sx = (vw - sw) / 2;
+      } else {
+        sh = vw / viewportAspect;
+        sy = (vh - sh) / 2;
+      }
+    } else {
+      // Limited crop: max 25% off any axis. Letterbox/pillarbox the rest.
+      const maxCrop = 0.25;
+      const coverScale = Math.max(viewW / vw, viewH / vh);
+      const visibleW = viewW / coverScale;
+      const visibleH = viewH / coverScale;
+      const cropW = 1 - visibleW / vw;
+      const cropH = 1 - visibleH / vh;
+
+      if (cropW <= maxCrop && cropH <= maxCrop) {
+        sw = visibleW;
+        sh = visibleH;
+        sx = (vw - sw) / 2;
+        sy = (vh - sh) / 2;
+      } else {
+        sw = Math.max(visibleW, vw * (1 - maxCrop));
+        sh = Math.max(visibleH, vh * (1 - maxCrop));
+        sx = (vw - sw) / 2;
+        sy = (vh - sh) / 2;
+
+        const srcAspect = sw / sh;
+        let fitW: number, fitH: number;
+        if (srcAspect > viewportAspect) {
+          fitW = viewW;
+          fitH = viewW / srcAspect;
+        } else {
+          fitH = viewH;
+          fitW = viewH * srcAspect;
+        }
+        dw = (fitW / viewW) * this.sampleWidth;
+        dh = (fitH / viewH) * this.sampleHeight;
+        dx = (this.sampleWidth - dw) / 2;
+        dy = (this.sampleHeight - dh) / 2;
+      }
+    }
+
     this.ctx.clearRect(0, 0, this.sampleWidth, this.sampleHeight);
-    this.ctx.drawImage(this.videoEl, 0, 0, this.sampleWidth, this.sampleHeight);
+    this.ctx.drawImage(this.videoEl, sx, sy, sw, sh, dx, dy, dw, dh);
     const data = this.ctx.getImageData(0, 0, this.sampleWidth, this.sampleHeight).data;
 
     // Read invert from map (live-updated) rather than stale currentItem
@@ -296,17 +376,32 @@ export class MediaEngine {
       if (shouldSample) this.sampleBrightness();
       this.fadeProgress = Math.max(0, this.fadeProgress - dt / this.fadeDuration);
       if (this.fadeProgress <= 0) {
-        this.cleanupCurrent();
-        if (this.queuedIndex >= 0) {
-          const idx = this.queuedIndex;
-          this.queuedIndex = -1;
-          this.currentIndex = idx;
-          this.loadMedia(this.items[idx]);
+        if (this.retainVideo) {
+          // Renderer still has particles in grid -- keep video alive and sampling
+          this.fadeDirection = 'retained';
         } else {
-          this.fadeDirection = 'idle';
-          this.idleTimer = 0;
-          this.nextInterval = intervalMin + Math.random() * (intervalMax - intervalMin);
+          this.cleanupCurrent();
+          if (this.queuedIndex >= 0) {
+            const idx = this.queuedIndex;
+            this.queuedIndex = -1;
+            this.currentIndex = idx;
+            this.loadMedia(this.items[idx]);
+          } else {
+            this.fadeDirection = 'idle';
+            this.idleTimer = 0;
+            this.nextInterval = intervalMin + Math.random() * (intervalMax - intervalMin);
+          }
         }
+      }
+    } else if (this.fadeDirection === 'retained') {
+      // Video kept alive for exit transition -- keep sampling so dots show animation
+      if (shouldSample) this.sampleBrightness();
+      this.updatePingpong(dt);
+      if (!this.retainVideo) {
+        this.cleanupCurrent();
+        this.fadeDirection = 'idle';
+        this.idleTimer = 0;
+        this.nextInterval = intervalMin + Math.random() * (intervalMax - intervalMin);
       }
     } else {
       if (!this.enabled) return;

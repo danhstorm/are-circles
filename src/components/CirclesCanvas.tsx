@@ -18,6 +18,7 @@ export default function CirclesCanvas() {
 
   const [appState, setAppState] = useState<AppState>(defaultAppState);
   const [panelVisible, setPanelVisible] = useState(false);
+  const [synthsVisible, setSynthsVisible] = useState(false);
   const [mode, setMode] = useState<'live' | 'setup'>('live');
   const [audioActive, setAudioActive] = useState(false);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -30,6 +31,7 @@ export default function CirclesCanvas() {
   const serverSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTemplateIdx = useRef(0);
+  const audioUnlocked = useRef(false);
   const isDev = process.env.NODE_ENV === 'development';
 
   const autoSave = useCallback((state: AppState) => {
@@ -150,7 +152,7 @@ export default function CirclesCanvas() {
       const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
       const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
 
-      if (shouldPlay) {
+      if (shouldPlay && audioUnlocked.current) {
         if (!music.isPlaying) await music.start();
         else music.fadeIn(2);
       } else if (music.isPlaying) {
@@ -172,19 +174,25 @@ export default function CirclesCanvas() {
         : scene;
       const settings = buildRendererSettings(merged, next);
       rendererRef.current?.updateSettings(settings);
+      if (next.transitionTiming) {
+        rendererRef.current!.transitionTiming = next.transitionTiming;
+      }
 
       // Update media maps
       const intensityMap: Record<string, number> = {};
       const contrastMap: Record<string, number> = {};
       const invertMap: Record<string, boolean> = {};
+      const zoomToFitMap: Record<string, boolean> = {};
       for (const [src, ov] of Object.entries(next.mediaOverrides)) {
         intensityMap[src] = ov.intensity;
         contrastMap[src] = ov.contrast ?? 0;
         invertMap[src] = ov.invert ?? false;
+        zoomToFitMap[src] = ov.zoomToFit ?? false;
       }
       rendererRef.current?.media.setIntensityMap(intensityMap);
       rendererRef.current?.media.setContrastMap(contrastMap);
       rendererRef.current?.media.setInvertMap(invertMap);
+      rendererRef.current?.media.setZoomToFitMap(zoomToFitMap);
 
       // Update music config
       const music = musicRef.current;
@@ -198,7 +206,7 @@ export default function CirclesCanvas() {
         music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
         music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
 
-        if (shouldPlay && !music.isPlaying) {
+        if (shouldPlay && !music.isPlaying && audioUnlocked.current) {
           music.start();
         } else if (shouldPlay && music.isPlaying) {
           music.fadeIn(0.5);
@@ -269,17 +277,18 @@ export default function CirclesCanvas() {
     if (renderer.introMode) {
       renderer.exitIntro();
       setInIntro(false);
+      audioUnlocked.current = true;
       const state = appStateRef.current;
       const scene = state.scenes[state.activePreset];
       if (music && !soundMutedRef.current && scene.soundEnabled) {
+        // Set instruments BEFORE start so scheduler uses correct state from beat 0
+        music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
+        music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
+        music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
+        music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
         const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
         if (anyEnabled) {
-          music.start(3).then(() => {
-            music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
-            music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
-            music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
-            music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
-          });
+          music.start(3);
         }
       }
       startPresetCycling(state);
@@ -292,6 +301,8 @@ export default function CirclesCanvas() {
     if (!canvas) return;
 
     let state = loadAppState();
+    // Always start on scene 1 (Presentation)
+    state = { ...state, activePreset: 0 };
     appStateRef.current = state;
     setSoundMuted(state.soundMuted ?? false);
     soundMutedRef.current = state.soundMuted ?? false;
@@ -309,7 +320,7 @@ export default function CirclesCanvas() {
     };
 
     syncWithServer(state).then(synced => {
-      state = synced;
+      state = { ...synced, activePreset: 0 };
       appStateRef.current = state;
       setSoundMuted(state.soundMuted ?? false);
       soundMutedRef.current = state.soundMuted ?? false;
@@ -326,14 +337,20 @@ export default function CirclesCanvas() {
     const intensityMap: Record<string, number> = {};
     const contrastMap: Record<string, number> = {};
     const invertMap: Record<string, boolean> = {};
+    const zoomToFitMap: Record<string, boolean> = {};
     for (const [src, ov] of Object.entries(state.mediaOverrides)) {
       intensityMap[src] = ov.intensity;
       contrastMap[src] = ov.contrast ?? 0;
       invertMap[src] = ov.invert ?? false;
+      zoomToFitMap[src] = ov.zoomToFit ?? false;
     }
     renderer.media.setIntensityMap(intensityMap);
     renderer.media.setContrastMap(contrastMap);
     renderer.media.setInvertMap(invertMap);
+    renderer.media.setZoomToFitMap(zoomToFitMap);
+    if (state.transitionTiming) {
+      renderer.transitionTiming = state.transitionTiming;
+    }
 
     renderer.start();
 
@@ -433,6 +450,9 @@ export default function CirclesCanvas() {
         case 'h': case 'H':
           setPanelVisible(v => !v);
           break;
+        case 'g': case 'G':
+          setSynthsVisible(v => !v);
+          break;
         case ' ':
           e.preventDefault();
           rendererRef.current?.toggleFade();
@@ -480,7 +500,7 @@ export default function CirclesCanvas() {
 
       {/* Music panel (left, only in setup mode) */}
       <MusicPanel
-        visible={panelVisible && mode === 'setup'}
+        visible={synthsVisible || (panelVisible && mode === 'setup')}
         appState={appState}
         editingPreset={editingPreset}
         onUpdate={updateAppState}
@@ -534,6 +554,7 @@ export default function CirclesCanvas() {
             next.mediaOverrides[item.src] = {
               playMode: item.playMode,
               invert: item.invert,
+              zoomToFit: existing.zoomToFit ?? false,
               intensity: existing.intensity,
               contrast: existing.contrast ?? 0,
             };
