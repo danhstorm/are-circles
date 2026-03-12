@@ -106,6 +106,7 @@ export const defaultAppState: AppState = {
   hiddenMedia: [],
   mediaGridColumns: 40,
   transitionSpeed: 0.15,
+  soundMuted: false,
   music: defaultMusicConfig,
 };
 
@@ -137,6 +138,11 @@ export function loadAppState(): AppState {
       const parsed = JSON.parse(stored);
       const base = structuredClone(defaultAppState);
       const merged = { ...base, ...parsed };
+
+      // Deep-merge globalColors so new fields get defaults
+      if (parsed.globalColors) {
+        merged.globalColors = { ...base.globalColors, ...parsed.globalColors };
+      }
 
       // Migrate livePresets -> scenes
       const savedScenes = parsed.scenes || parsed.livePresets;
@@ -231,6 +237,9 @@ export async function syncWithServer(current: AppState): Promise<AppState> {
       // Deep-merge server state with defaults to fill any missing fields
       const base = structuredClone(defaultAppState);
       const merged = { ...base, ...server };
+      if (server.globalColors) {
+        merged.globalColors = { ...base.globalColors, ...server.globalColors };
+      }
       if (server.scenes) {
         merged.scenes = base.scenes.map((def: Scene, i: number) => {
           const saved = server.scenes[i];
@@ -285,6 +294,9 @@ export function resetToServerDefaults(): Promise<AppState> {
       }
       const base = structuredClone(defaultAppState);
       const merged = { ...base, ...server };
+      if (server.globalColors) {
+        merged.globalColors = { ...base.globalColors, ...server.globalColors };
+      }
       if (server.scenes) {
         merged.scenes = base.scenes.map((def: Scene, i: number) => {
           const saved = server.scenes[i];

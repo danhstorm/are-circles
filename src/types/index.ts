@@ -242,5 +242,6 @@ export interface AppState {
   hiddenMedia: string[];
   mediaGridColumns: number;
   transitionSpeed: number;
+  soundMuted: boolean;
   music: MusicConfig;
 }

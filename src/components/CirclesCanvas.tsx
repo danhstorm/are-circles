@@ -24,7 +24,7 @@ export default function CirclesCanvas() {
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
   const [editingPreset, setEditingPreset] = useState(0);
   const [inIntro, setInIntro] = useState(true);
-  const [soundMuted, setSoundMuted] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(() => defaultAppState.soundMuted);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const cycleTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -229,9 +229,15 @@ export default function CirclesCanvas() {
           }
         }
       }
+      // Persist mute state
+      const state = appStateRef.current;
+      const next = { ...state, soundMuted: newMuted };
+      appStateRef.current = next;
+      setAppState(next);
+      autoSave(next);
       return newMuted;
     });
-  }, []);
+  }, [autoSave]);
 
   const handleFirstInteraction = useCallback(() => {
     const renderer = rendererRef.current;
@@ -267,6 +273,8 @@ export default function CirclesCanvas() {
 
     let state = loadAppState();
     appStateRef.current = state;
+    setSoundMuted(state.soundMuted ?? false);
+    soundMutedRef.current = state.soundMuted ?? false;
 
     const hydrateFrame = window.requestAnimationFrame(() => {
       setAppState(state);
@@ -283,6 +291,8 @@ export default function CirclesCanvas() {
     syncWithServer(state).then(synced => {
       state = synced;
       appStateRef.current = state;
+      setSoundMuted(state.soundMuted ?? false);
+      soundMutedRef.current = state.soundMuted ?? false;
       setAppState(state);
       const settings = buildRendererSettings(mergeTemplate(state), state);
       rendererRef.current?.updateSettings(settings);
