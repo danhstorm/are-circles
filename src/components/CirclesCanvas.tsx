@@ -348,6 +348,21 @@ export default function CirclesCanvas() {
       setAppState(state);
       const settings = buildRendererSettings(mergeTemplate(state), state);
       rendererRef.current?.updateSettings(settings);
+      // Re-apply media maps from synced overrides
+      const sIntensity: Record<string, number> = {};
+      const sContrast: Record<string, number> = {};
+      const sInvert: Record<string, boolean> = {};
+      const sZoom: Record<string, boolean> = {};
+      for (const [src, ov] of Object.entries(state.mediaOverrides)) {
+        sIntensity[src] = ov.intensity;
+        sContrast[src] = ov.contrast ?? 0;
+        sInvert[src] = ov.invert ?? false;
+        sZoom[src] = ov.zoomToFit ?? false;
+      }
+      rendererRef.current?.media.setIntensityMap(sIntensity);
+      rendererRef.current?.media.setContrastMap(sContrast);
+      rendererRef.current?.media.setInvertMap(sInvert);
+      rendererRef.current?.media.setZoomToFitMap(sZoom);
     });
 
     const settings = buildRendererSettings(mergeTemplate(state), state);
@@ -401,15 +416,17 @@ export default function CirclesCanvas() {
     }, 16);
 
     // Load media from static manifest (works on Vercel + local)
+    // Use appStateRef.current to get the latest state (may have been updated by syncWithServer)
     fetch('/media-manifest.json', { cache: 'no-store' })
       .then(r => r.json())
       .then((items: MediaItem[]) => {
-        const hidden = state.hiddenMedia || [];
-        const order = state.mediaOrder || [];
+        const latest = appStateRef.current;
+        const hidden = latest.hiddenMedia || [];
+        const order = latest.mediaOrder || [];
         const merged = items
           .filter((item: MediaItem) => !hidden.includes(item.src))
           .map((item: MediaItem) => {
-            const ov = getMediaOverride(state, item.src);
+            const ov = getMediaOverride(latest, item.src);
             return { ...item, playMode: ov.playMode, invert: ov.invert };
           });
         // Sort by saved order; items not in order go to the end
