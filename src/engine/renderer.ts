@@ -599,10 +599,18 @@ export class CirclesRenderer {
     // Assign originals to the BRIGHTEST cells. This forces all original dots
     // to converge on the active/bright area of the video during transition.
     const usedKeys = new Set<number>();
-    for (let i = 0; i < origCount && i < sorted.length; i++) {
+    const assignableCount = Math.min(origCount, sorted.length);
+    for (let i = 0; i < assignableCount; i++) {
       this.particles[i].mediaGridX = sorted[i].x;
       this.particles[i].mediaGridY = sorted[i].y;
       usedKeys.add(sorted[i].key);
+    }
+
+    // Originals beyond cell count: double up on brightest cells (center-biased)
+    for (let i = assignableCount; i < origCount; i++) {
+      const cell = sorted[i % sorted.length];
+      this.particles[i].mediaGridX = cell.x;
+      this.particles[i].mediaGridY = cell.y;
     }
 
     // Extras get the remaining (darker) cells
@@ -1072,13 +1080,17 @@ export class CirclesRenderer {
       let targetY: number;
       let posSpeed: number;
 
+      // Safety: if mediaGridX/Y was never assigned (still 0,0), default to viewport center
+      const mgx = (inMediaGrid && p.mediaGridX === 0 && p.mediaGridY === 0) ? w * 0.5 : p.mediaGridX;
+      const mgy = (inMediaGrid && p.mediaGridX === 0 && p.mediaGridY === 0) ? h * 0.5 : p.mediaGridY;
+
       if (inMediaGrid && isExtraP) {
-        targetX = p.mediaGridX;
-        targetY = p.mediaGridY;
+        targetX = mgx;
+        targetY = mgy;
         posSpeed = 5 * tt.enterSpeed;
       } else if (inMediaGrid && mediaActive && p.mediaBlendProgress > 0.001) {
-        targetX = p.mediaGridX;
-        targetY = p.mediaGridY;
+        targetX = mgx;
+        targetY = mgy;
         posSpeed = (2 + p.mediaBlendProgress * 3) * tt.enterSpeed;
       } else if (inMediaGrid && !mediaActive && p.mediaBlendProgress > 0.001) {
         targetX = p.homeX;

@@ -84,12 +84,6 @@
     "invert": false
   },
   {
-    "src": "/media/fish.mp4",
-    "type": "video",
-    "playMode": "loop",
-    "invert": false
-  },
-  {
     "src": "/media/fluffy-balls.mp4",
     "type": "video",
     "playMode": "loop",
@@ -127,12 +121,6 @@
   },
   {
     "src": "/media/jellyfish.mp4",
-    "type": "video",
-    "playMode": "loop",
-    "invert": false
-  },
-  {
-    "src": "/media/light-beam-woman.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false
@@ -187,12 +175,6 @@
   },
   {
     "src": "/media/shadow-boxing.mp4",
-    "type": "video",
-    "playMode": "loop",
-    "invert": false
-  },
-  {
-    "src": "/media/shark-fin.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false

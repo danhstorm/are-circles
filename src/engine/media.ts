@@ -187,13 +187,7 @@ export class MediaEngine {
         if (this.currentItem?.playMode === 'pingpong' && !this.pingpongReverse) {
           this.pingpongReverse = true;
           this.pingpongTime = v.duration;
-          v.currentTime = v.duration - 0.01;
-          try {
-            v.playbackRate = -1;
-            v.play().catch(() => { v.pause(); });
-          } catch {
-            v.pause();
-          }
+          v.pause();
         }
       };
     } else {
@@ -229,21 +223,13 @@ export class MediaEngine {
     const v = this.videoEl;
     if (!v || !this.pingpongReverse) return;
 
-    if (v.playbackRate < 0) {
-      if (v.currentTime <= 0.05) {
-        this.pingpongReverse = false;
-        v.playbackRate = 1;
-        v.currentTime = 0;
-        v.play();
-      }
-    } else {
-      this.pingpongTime = Math.max(0, this.pingpongTime - dt);
-      v.currentTime = this.pingpongTime;
-      if (this.pingpongTime <= 0.05) {
-        this.pingpongReverse = false;
-        v.currentTime = 0;
-        v.play();
-      }
+    // Always use manual seeking -- negative playbackRate is unsupported in most browsers
+    this.pingpongTime = Math.max(0, this.pingpongTime - dt);
+    try { v.currentTime = this.pingpongTime; } catch { /* seek may fail briefly */ }
+    if (this.pingpongTime <= 0.05) {
+      this.pingpongReverse = false;
+      v.currentTime = 0;
+      v.play().catch(() => {});
     }
   }
 

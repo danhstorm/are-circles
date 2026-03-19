@@ -1,6 +1,6 @@
 {
-  "version": "gd4loh",
-  "activePreset": 1,
+  "version": "gi5fy2",
+  "activePreset": 0,
   "scenes": [
     {
       "name": "Calm",
@@ -693,11 +693,11 @@
       "zoomToFit": false
     },
     "/media/bat-flight.mp4": {
-      "playMode": "loop",
+      "playMode": "pingpong",
       "invert": false,
+      "zoomToFit": false,
       "intensity": 1.15,
-      "contrast": 0,
-      "zoomToFit": false
+      "contrast": 0
     },
     "/media/bw-studio-portrait.mp4": {
       "playMode": "loop",
