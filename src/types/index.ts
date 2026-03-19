@@ -183,6 +183,8 @@ export interface PlingConfig {
   volumeMax: number;
   speed: SpeedSubdivision;
   triggerProbability: number;
+  rhythmRepeat: number;
+  toneRepeat: number;
   delay: number;
   reverb: number;
   lfoSpeed: number;
@@ -212,6 +214,8 @@ export interface MidConfig {
   sound: MidSound;
   speed: SpeedSubdivision;
   triggerProbability: number;
+  rhythmRepeat: number;
+  toneRepeat: number;
   octaveLow: number;
   octaveHigh: number;
   filterCutoff: number;

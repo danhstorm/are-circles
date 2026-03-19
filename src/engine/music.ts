@@ -38,7 +38,7 @@ function subdivisionToBeats(sub: SpeedSubdivision): number {
   }
 }
 
-function pickNote(scale: number[], midiLow: number, midiHigh: number): number {
+function getScaleNotesInRange(scale: number[], midiLow: number, midiHigh: number): number[] {
   const notes: number[] = [];
   for (let octave = 0; octave < 10; octave++) {
     for (const degree of scale) {
@@ -46,7 +46,42 @@ function pickNote(scale: number[], midiLow: number, midiHigh: number): number {
       if (midi >= midiLow && midi <= midiHigh) notes.push(midi);
     }
   }
-  return notes[Math.floor(Math.random() * notes.length)] || midiLow;
+  return notes;
+}
+
+function pickRandomNote(notes: number[], fallback: number): number {
+  return notes[Math.floor(Math.random() * notes.length)] ?? fallback;
+}
+
+function nearestNote(notes: number[], target: number): number {
+  let best = notes[0] ?? target;
+  let bestDist = Infinity;
+  for (const note of notes) {
+    const dist = Math.abs(note - target);
+    if (dist < bestDist) {
+      best = note;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function pickNearNote(notes: number[], target: number, repeatness: number): number {
+  if (!notes.length) return target;
+  const nearest = nearestNote(notes, target);
+  if (repeatness >= 0.999) return nearest;
+
+  const spread = 0.6 + (1 - repeatness) * 4.4;
+  const weights = notes.map((note) => Math.exp(-Math.abs(note - target) / spread));
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return nearest;
+
+  let choice = Math.random() * total;
+  for (let i = 0; i < notes.length; i++) {
+    choice -= weights[i];
+    if (choice <= 0) return notes[i];
+  }
+  return nearest;
 }
 
 function pickChord(scale: number[], bassMidi: number): number[] {
@@ -98,7 +133,7 @@ export const defaultMusicConfig: MusicConfig = {
   tempo: 54,
   masterVolume: 0.7,
   pling: {
-    volumeMin: 0.1, volumeMax: 0.35, speed: '1/8', triggerProbability: 0.35,
+    volumeMin: 0.1, volumeMax: 0.35, speed: '1/8', triggerProbability: 0.35, rhythmRepeat: 0.2, toneRepeat: 0.2,
     delay: 0.4, reverb: 0.6, lfoSpeed: 1.5, lfoDepth: 0.3,
     octaveLow: 4, octaveHigh: 7, filterCutoff: 3000, filterQ: 1.5, decay: 0.2,
     autoFilterMin: 1200, autoFilterMax: 4500, autoDecayMin: 0.08, autoDecayMax: 0.3,
@@ -106,14 +141,14 @@ export const defaultMusicConfig: MusicConfig = {
     autoTriggerMin: 0.35, autoTriggerMax: 0.35, autoSpeed: 0.06,
   },
   mid1: {
-    volumeMin: 0.2, volumeMax: 0.5, sound: 'glass', speed: '1/2', triggerProbability: 0.35,
+    volumeMin: 0.2, volumeMax: 0.5, sound: 'glass', speed: '1/2', triggerProbability: 0.35, rhythmRepeat: 0.2, toneRepeat: 0.2,
     octaveLow: 3, octaveHigh: 5, filterCutoff: 3000, decay: 1.5, fmAmount: 0.6,
     delay: 0.3, reverb: 0.5,
     autoFilterMin: 3000, autoFilterMax: 3000, autoDecayMin: 1.5, autoDecayMax: 1.5,
     autoFmMin: 0.6, autoFmMax: 0.6, autoTriggerMin: 0.35, autoTriggerMax: 0.35, autoSpeed: 0.04,
   },
   mid2: {
-    volumeMin: 0.15, volumeMax: 0.4, sound: 'rhodes', speed: '1/4', triggerProbability: 0.2,
+    volumeMin: 0.15, volumeMax: 0.4, sound: 'rhodes', speed: '1/4', triggerProbability: 0.2, rhythmRepeat: 0.2, toneRepeat: 0.2,
     octaveLow: 2, octaveHigh: 4, filterCutoff: 2000, decay: 2.0, fmAmount: 0.8,
     delay: 0.4, reverb: 0.6,
     autoFilterMin: 2000, autoFilterMax: 2000, autoDecayMin: 2.0, autoDecayMax: 2.0,
@@ -123,6 +158,35 @@ export const defaultMusicConfig: MusicConfig = {
   drums: defaultDrumConfig,
   visualReactions: { swirlStrength: 0.2, swirlRadius: 0.08, sizePulseStrength: 0.15, bassSizeBoost: 0.15 },
 };
+
+type RepeatInstrumentId = 'pling' | 'mid1' | 'mid2';
+
+interface RepeatMemory {
+  slotsPerBar: number;
+  currentBar: number | null;
+  hasPreviousBar: boolean;
+  previousTriggered: boolean[];
+  previousNotes: (number | null)[];
+  currentTriggered: boolean[];
+  currentNotes: (number | null)[];
+}
+
+interface RepeatSlotContext {
+  memory: RepeatMemory;
+  slotIndex: number;
+}
+
+function makeRepeatMemory(slotsPerBar: number): RepeatMemory {
+  return {
+    slotsPerBar,
+    currentBar: null,
+    hasPreviousBar: false,
+    previousTriggered: Array(slotsPerBar).fill(false),
+    previousNotes: Array(slotsPerBar).fill(null),
+    currentTriggered: Array(slotsPerBar).fill(false),
+    currentNotes: Array(slotsPerBar).fill(null),
+  };
+}
 
 export class MusicEngine {
   private ctx: AudioContext | null = null;
@@ -153,6 +217,11 @@ export class MusicEngine {
   private autoPhase = 0;
   private autoMid1Phase = 0;
   private autoMid2Phase = 0;
+  private repeatMemory: Record<RepeatInstrumentId, RepeatMemory> = {
+    pling: makeRepeatMemory(8),
+    mid1: makeRepeatMemory(2),
+    mid2: makeRepeatMemory(4),
+  };
 
   get isPlaying() { return this._playing; }
 
@@ -179,6 +248,7 @@ export class MusicEngine {
     this.beatOrigin = this.ctx.currentTime + 0.05;
     this.nextBeat = { pling: 0, mid1: 0, mid2: 0 };
     this.padNextChordBeat = 0;
+    this.resetRepeatMemory();
     this.fadeIn(fadeDur);
     this.schedulerTimer = setInterval(() => this.schedule(), 25);
   }
@@ -224,14 +294,17 @@ export class MusicEngine {
       if (c.pling.speed !== old.pling.speed) {
         const interval = subdivisionToBeats(c.pling.speed);
         this.nextBeat.pling = Math.ceil(currentBeat / interval) * interval;
+        this.resetRepeatMemory('pling');
       }
       if (c.mid1.speed !== old.mid1.speed) {
         const interval = subdivisionToBeats(c.mid1.speed);
         this.nextBeat.mid1 = Math.ceil(currentBeat / interval) * interval;
+        this.resetRepeatMemory('mid1');
       }
       if (c.mid2.speed !== old.mid2.speed) {
         const interval = subdivisionToBeats(c.mid2.speed);
         this.nextBeat.mid2 = Math.ceil(currentBeat / interval) * interval;
+        this.resetRepeatMemory('mid2');
       }
       if (c.pad.chordInterval !== old.pad.chordInterval) {
         const interval = c.pad.chordInterval * 4;
@@ -373,6 +446,79 @@ export class MusicEngine {
     return lo + t * (hi - lo);
   }
 
+  private resetRepeatMemory(inst?: RepeatInstrumentId) {
+    if (inst) {
+      this.repeatMemory[inst] = makeRepeatMemory(this.repeatMemory[inst].slotsPerBar);
+      return;
+    }
+    this.repeatMemory = {
+      pling: makeRepeatMemory(this.repeatMemory.pling.slotsPerBar),
+      mid1: makeRepeatMemory(this.repeatMemory.mid1.slotsPerBar),
+      mid2: makeRepeatMemory(this.repeatMemory.mid2.slotsPerBar),
+    };
+  }
+
+  private getRepeatSlot(inst: RepeatInstrumentId, beat: number, interval: number): RepeatSlotContext {
+    const slotsPerBar = Math.max(1, Math.round(4 / interval));
+    let memory = this.repeatMemory[inst];
+
+    if (memory.slotsPerBar !== slotsPerBar) {
+      memory = makeRepeatMemory(slotsPerBar);
+      this.repeatMemory[inst] = memory;
+    }
+
+    const bar = Math.floor((beat + 1e-6) / 4);
+    if (memory.currentBar === null) {
+      memory.currentBar = bar;
+    }
+
+    while ((memory.currentBar ?? bar) < bar) {
+      memory.previousTriggered = [...memory.currentTriggered];
+      memory.previousNotes = [...memory.currentNotes];
+      memory.currentTriggered = Array(slotsPerBar).fill(false);
+      memory.currentNotes = Array(slotsPerBar).fill(null);
+      memory.currentBar = (memory.currentBar ?? bar) + 1;
+      memory.hasPreviousBar = true;
+    }
+
+    const slotIndex = ((Math.round(beat / interval) % slotsPerBar) + slotsPerBar) % slotsPerBar;
+    return { memory, slotIndex };
+  }
+
+  private shouldTriggerRepeat(slot: RepeatSlotContext, baseProbability: number, repeatness: number): boolean {
+    if (slot.memory.hasPreviousBar && Math.random() < repeatness) {
+      return slot.memory.previousTriggered[slot.slotIndex] ?? false;
+    }
+    return Math.random() < baseProbability;
+  }
+
+  private recordRest(slot: RepeatSlotContext) {
+    slot.memory.currentTriggered[slot.slotIndex] = false;
+    slot.memory.currentNotes[slot.slotIndex] = null;
+  }
+
+  private recordNote(slot: RepeatSlotContext, midi: number) {
+    slot.memory.currentTriggered[slot.slotIndex] = true;
+    slot.memory.currentNotes[slot.slotIndex] = midi;
+  }
+
+  private pickRepeatedNote(
+    scale: number[],
+    midiLow: number,
+    midiHigh: number,
+    slot: RepeatSlotContext,
+    toneRepeat: number,
+  ): number {
+    const notes = getScaleNotesInRange(scale, midiLow, midiHigh);
+    const fallback = notes[0] ?? midiLow;
+    const previousNote = slot.memory.hasPreviousBar ? slot.memory.previousNotes[slot.slotIndex] : null;
+
+    if (previousNote !== null && Math.random() < toneRepeat) {
+      return pickNearNote(notes, previousNote, toneRepeat);
+    }
+    return pickRandomNote(notes, fallback);
+  }
+
   private schedule() {
     if (!this.ctx || !this._playing) return;
     const now = this.ctx.currentTime;
@@ -390,8 +536,11 @@ export class MusicEngine {
       const interval = subdivisionToBeats(c.pling.speed);
       const curTrigger = this.pingPong(this.autoPhase * 1.3, c.pling.autoTriggerMin, c.pling.autoTriggerMax);
       while (this.beatToTime(this.nextBeat.pling) < ahead) {
-        if (Math.random() < curTrigger) {
-          this.playPling(this.beatToTime(this.nextBeat.pling));
+        const slot = this.getRepeatSlot('pling', this.nextBeat.pling, interval);
+        if (this.shouldTriggerRepeat(slot, curTrigger, c.pling.rhythmRepeat)) {
+          this.playPling(this.beatToTime(this.nextBeat.pling), slot);
+        } else {
+          this.recordRest(slot);
         }
         this.nextBeat.pling += interval;
       }
@@ -405,8 +554,11 @@ export class MusicEngine {
       const interval = subdivisionToBeats(c.mid1.speed);
       const curTrigger = this.pingPong(this.autoMid1Phase * 1.3, c.mid1.autoTriggerMin, c.mid1.autoTriggerMax);
       while (this.beatToTime(this.nextBeat.mid1) < ahead) {
-        if (Math.random() < curTrigger) {
-          this.playMid(this.beatToTime(this.nextBeat.mid1), c.mid1, this.autoMid1Phase);
+        const slot = this.getRepeatSlot('mid1', this.nextBeat.mid1, interval);
+        if (this.shouldTriggerRepeat(slot, curTrigger, c.mid1.rhythmRepeat)) {
+          this.playMid(this.beatToTime(this.nextBeat.mid1), c.mid1, this.autoMid1Phase, slot);
+        } else {
+          this.recordRest(slot);
         }
         this.nextBeat.mid1 += interval;
       }
@@ -420,8 +572,11 @@ export class MusicEngine {
       const interval = subdivisionToBeats(c.mid2.speed);
       const curTrigger = this.pingPong(this.autoMid2Phase * 1.3, c.mid2.autoTriggerMin, c.mid2.autoTriggerMax);
       while (this.beatToTime(this.nextBeat.mid2) < ahead) {
-        if (Math.random() < curTrigger) {
-          this.playMid(this.beatToTime(this.nextBeat.mid2), c.mid2, this.autoMid2Phase);
+        const slot = this.getRepeatSlot('mid2', this.nextBeat.mid2, interval);
+        if (this.shouldTriggerRepeat(slot, curTrigger, c.mid2.rhythmRepeat)) {
+          this.playMid(this.beatToTime(this.nextBeat.mid2), c.mid2, this.autoMid2Phase, slot);
+        } else {
+          this.recordRest(slot);
         }
         this.nextBeat.mid2 += interval;
       }
@@ -452,13 +607,13 @@ export class MusicEngine {
 
   // ─── Pling ───
 
-  private playPling(time: number) {
+  private playPling(time: number, slot: RepeatSlotContext) {
     const ctx = this.ctx!;
     const c = this.config.pling;
     const scale = SCALES[this.config.scale];
     const midiLow = c.octaveLow * 12 + 12;
     const midiHigh = c.octaveHigh * 12 + 12;
-    const midi = pickNote(scale, midiLow, midiHigh);
+    const midi = this.pickRepeatedNote(scale, midiLow, midiHigh, slot, c.toneRepeat);
     const freq = midiToFreq(midi);
 
     // Automated values (ping-pong, each at slightly different phase rates)
@@ -526,6 +681,7 @@ export class MusicEngine {
     const stopTime = time + noteDur + 0.5;
     osc.stop(stopTime);
     lfo.stop(stopTime);
+    this.recordNote(slot, midi);
 
     // Swirl (pling: 30% strength)
     this.addSwirl(0.3, midi, midiLow, midiHigh);
@@ -534,13 +690,13 @@ export class MusicEngine {
 
   // ─── Mid (FM synthesis) ───
 
-  private playMid(time: number, mc: MidConfig, autoPhase: number) {
+  private playMid(time: number, mc: MidConfig, autoPhase: number, slot: RepeatSlotContext) {
     const ctx = this.ctx!;
     const preset = MID_PRESETS[mc.sound];
     const scale = SCALES[this.config.scale];
     const midiLow = mc.octaveLow * 12 + 12;
     const midiHigh = mc.octaveHigh * 12 + 12;
-    const midi = pickNote(scale, midiLow, midiHigh);
+    const midi = this.pickRepeatedNote(scale, midiLow, midiHigh, slot, mc.toneRepeat);
     const freq = midiToFreq(midi);
     const rawVol = mc.volumeMin + Math.random() * (mc.volumeMax - mc.volumeMin);
     const vol = rawVol * rawVol;
@@ -640,6 +796,7 @@ export class MusicEngine {
     carrier.stop(stopTime);
     mod.start(time);
     mod.stop(stopTime);
+    this.recordNote(slot, midi);
 
     this.addSwirl(vol * 3, midi, midiLow, midiHigh);
     this.addSizePulse(midi, midiLow, midiHigh, vol * 3);

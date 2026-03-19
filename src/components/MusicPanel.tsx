@@ -509,6 +509,8 @@ export default function MusicPanel({ visible, appState, editingPreset, drumStep,
                 <Slider label="Reverb" value={music.pling.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('pling', 'reverb', value)} color={SECTION_ACCENTS.pling} />
                 <AutoSection accent={SECTION_ACCENTS.pling}>
                   <Slider label="Auto Speed" value={music.pling.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('pling', 'autoSpeed', value)} color={SECTION_ACCENTS.pling} />
+                  <Slider label="Rhythm Repeat" value={music.pling.rhythmRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('pling', 'rhythmRepeat', value)} color={SECTION_ACCENTS.pling} />
+                  <Slider label="Tone Repeat" value={music.pling.toneRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('pling', 'toneRepeat', value)} color={SECTION_ACCENTS.pling} />
                   <RangeSlider label="Filter" low={music.pling.autoFilterMin} high={music.pling.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('pling', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.pling} />
                   <RangeSlider label="Decay" low={music.pling.autoDecayMin} high={music.pling.autoDecayMax} min={0.02} max={1} step={0.02} onChange={(low, high) => setInstMulti('pling', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.pling} />
                   <RangeSlider label="LFO Speed" low={music.pling.autoLfoSpeedMin} high={music.pling.autoLfoSpeedMax} min={0.1} max={10} step={0.1} onChange={(low, high) => setInstMulti('pling', { autoLfoSpeedMin: low, autoLfoSpeedMax: high })} color={SECTION_ACCENTS.pling} />
@@ -532,6 +534,8 @@ export default function MusicPanel({ visible, appState, editingPreset, drumStep,
                 <Slider label="Reverb" value={music.mid1.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('mid1', 'reverb', value)} color={SECTION_ACCENTS.plong} />
                 <AutoSection accent={SECTION_ACCENTS.plong}>
                   <Slider label="Auto Speed" value={music.mid1.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('mid1', 'autoSpeed', value)} color={SECTION_ACCENTS.plong} />
+                  <Slider label="Rhythm Repeat" value={music.mid1.rhythmRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('mid1', 'rhythmRepeat', value)} color={SECTION_ACCENTS.plong} />
+                  <Slider label="Tone Repeat" value={music.mid1.toneRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('mid1', 'toneRepeat', value)} color={SECTION_ACCENTS.plong} />
                   <RangeSlider label="Filter" low={music.mid1.autoFilterMin} high={music.mid1.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('mid1', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.plong} />
                   <RangeSlider label="Decay" low={music.mid1.autoDecayMin} high={music.mid1.autoDecayMax} min={0.2} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid1', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.plong} />
                   <RangeSlider label="FM" low={music.mid1.autoFmMin} high={music.mid1.autoFmMax} min={0} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid1', { autoFmMin: low, autoFmMax: high })} color={SECTION_ACCENTS.plong} />
@@ -554,6 +558,8 @@ export default function MusicPanel({ visible, appState, editingPreset, drumStep,
                 <Slider label="Reverb" value={music.mid2.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('mid2', 'reverb', value)} color={SECTION_ACCENTS.bong} />
                 <AutoSection accent={SECTION_ACCENTS.bong}>
                   <Slider label="Auto Speed" value={music.mid2.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setInst('mid2', 'autoSpeed', value)} color={SECTION_ACCENTS.bong} />
+                  <Slider label="Rhythm Repeat" value={music.mid2.rhythmRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('mid2', 'rhythmRepeat', value)} color={SECTION_ACCENTS.bong} />
+                  <Slider label="Tone Repeat" value={music.mid2.toneRepeat} min={0} max={1} step={0.05} onChange={(value) => setInst('mid2', 'toneRepeat', value)} color={SECTION_ACCENTS.bong} />
                   <RangeSlider label="Filter" low={music.mid2.autoFilterMin} high={music.mid2.autoFilterMax} min={200} max={8000} step={50} onChange={(low, high) => setInstMulti('mid2', { autoFilterMin: low, autoFilterMax: high })} color={SECTION_ACCENTS.bong} />
                   <RangeSlider label="Decay" low={music.mid2.autoDecayMin} high={music.mid2.autoDecayMax} min={0.2} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid2', { autoDecayMin: low, autoDecayMax: high })} color={SECTION_ACCENTS.bong} />
                   <RangeSlider label="FM" low={music.mid2.autoFmMin} high={music.mid2.autoFmMax} min={0} max={3} step={0.1} onChange={(low, high) => setInstMulti('mid2', { autoFmMin: low, autoFmMax: high })} color={SECTION_ACCENTS.bong} />
