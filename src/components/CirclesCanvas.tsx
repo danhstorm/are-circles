@@ -25,8 +25,10 @@ export default function CirclesCanvas() {
   const [activeMediaIndex, setActiveMediaIndex] = useState(-1);
   const [editingPreset, setEditingPreset] = useState(0);
   const [playingTemplate, setPlayingTemplate] = useState<number | null>(null);
-  const [inIntro, setInIntro] = useState(true);
+  const [, setInIntro] = useState(true);
   const [soundMuted, setSoundMuted] = useState(() => defaultAppState.soundMuted);
+  const [drumStep, setDrumStep] = useState(-1);
+  const drumStepRef = useRef(-1);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const serverSaveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -169,6 +171,7 @@ export default function CirclesCanvas() {
       music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
       music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
       music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+      music.setInstrumentEnabled('drums', scene.musicInstruments.drums);
 
       const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
       const shouldPlay = !soundMutedRef.current && scene.soundEnabled && anyEnabled;
@@ -226,6 +229,7 @@ export default function CirclesCanvas() {
         music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
         music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
         music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+        music.setInstrumentEnabled('drums', scene.musicInstruments.drums);
 
         if (shouldPlay && !music.isPlaying && audioUnlocked.current) {
           music.start();
@@ -270,6 +274,7 @@ export default function CirclesCanvas() {
         music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
         music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
         music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+        music.setInstrumentEnabled('drums', scene.musicInstruments.drums);
 
         const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
         if (scene.soundEnabled && anyEnabled) {
@@ -307,6 +312,7 @@ export default function CirclesCanvas() {
         music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
         music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
         music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+        music.setInstrumentEnabled('drums', scene.musicInstruments.drums);
         const anyEnabled = Object.values(scene.musicInstruments).some(v => v);
         if (anyEnabled) {
           music.start(3);
@@ -405,6 +411,7 @@ export default function CirclesCanvas() {
         // Drain queues so stale impulses don't build up
         music.getSwirlImpulses();
         music.getNotePulses();
+        music.drums.getRipples();
         renderer.setMusicSizePulse(0);
         return;
       }
@@ -413,7 +420,19 @@ export default function CirclesCanvas() {
       renderer.setMusicSizePulse(music.getSizePulse());
       const notePulses = music.getNotePulses();
       for (const np of notePulses) renderer.triggerNotePulse(np.count, np.strength);
+      // Drum ripples
+      const ripples = music.drums.getRipples();
+      if (ripples.length > 0) renderer.addDrumRipples(ripples);
     }, 16);
+
+    // Drum step UI poll -- slower rate (60ms), only when panel is visible
+    const drumStepPoll = setInterval(() => {
+      const step = music.drums.getDrumStep();
+      if (step !== drumStepRef.current) {
+        drumStepRef.current = step;
+        setDrumStep(step);
+      }
+    }, 60);
 
     // Load media from static manifest (works on Vercel + local)
     // Use appStateRef.current to get the latest state (may have been updated by syncWithServer)
@@ -459,6 +478,7 @@ export default function CirclesCanvas() {
       window.removeEventListener('resize', handleResize);
       clearInterval(mediaIndexPoll);
       clearInterval(musicPump);
+      clearInterval(drumStepPoll);
       clearTimeout(cycleTimer.current);
       renderer.stop();
       music.destroy();
@@ -510,7 +530,7 @@ export default function CirclesCanvas() {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [applyPreset, handleFirstInteraction]);
+  }, [applyPreset, handleFirstInteraction, toggleSoundMute]);
 
   return (
     <>
@@ -541,6 +561,7 @@ export default function CirclesCanvas() {
         visible={synthsVisible || (panelVisible && mode === 'setup')}
         appState={appState}
         editingPreset={editingPreset}
+        drumStep={drumStep}
         onUpdate={updateAppState}
       />
 

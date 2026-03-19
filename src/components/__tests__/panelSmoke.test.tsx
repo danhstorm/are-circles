@@ -14,15 +14,16 @@ describe('panel smoke tests', () => {
         visible
         appState={structuredClone(defaultAppState)}
         editingPreset={0}
+        drumStep={-1}
         onUpdate={noop}
       />,
     );
 
     expect(screen.getByTestId('music-panel-shell')).toHaveAttribute('data-panel-style', 'companion-rack');
-    expect(screen.getByText('SYNTH')).toBeInTheDocument();
     expect(screen.getByText('Master Volume')).toBeInTheDocument();
     expect(screen.getByText('Pling')).toBeInTheDocument();
     expect(screen.getByText('Plong')).toBeInTheDocument();
+    expect(screen.getByText('Drums')).toBeInTheDocument();
   });
 
   it('renders the setup panel as a companion rack surface while keeping edit controls', () => {

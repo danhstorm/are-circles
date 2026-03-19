@@ -58,6 +58,7 @@ export class DrumMachine {
   private chorusLfo1: OscillatorNode | null = null;
   private chorusLfo2: OscillatorNode | null = null;
   private noiseBuffer: AudioBuffer | null = null;
+  private graphBuilt = false;
 
   private config: DrumConfig;
   private enabled = false;
@@ -77,7 +78,12 @@ export class DrumMachine {
     this.ctx = ctx;
     this.masterGain = masterGain;
     this.delayNode = delayNode;
+  }
+
+  private ensureGraph() {
+    if (this.graphBuilt || !this.ctx) return;
     this.buildDrumGraph();
+    this.graphBuilt = true;
   }
 
   private buildDrumGraph() {
@@ -142,17 +148,24 @@ export class DrumMachine {
     chorusOut.connect(this.drumGain);
   }
 
-  setEnabled(on: boolean) { this.enabled = on; }
+  setEnabled(on: boolean) {
+    this.enabled = on;
+    if (on) this.ensureGraph();
+  }
   get isEnabled() { return this.enabled; }
 
   updateConfig(c: DrumConfig) {
-    this.config = structuredClone(c);
+    this.config = c;
     if (this.drumGain && this.ctx) {
       this.drumGain.gain.setTargetAtTime(c.volume, this.ctx.currentTime, 0.05);
     }
   }
 
   getRipples(): DrumRipple[] {
+    if (!this.enabled) {
+      this.pendingRipples.length = 0;
+      return [];
+    }
     const out = this.pendingRipples;
     this.pendingRipples = [];
     return out;

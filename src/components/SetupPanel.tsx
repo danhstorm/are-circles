@@ -261,13 +261,13 @@ export default function SetupPanel({ visible, mode, onSetMode, onClose, appState
 
   useEffect(() => () => { clearTimeout(confirmTimer.current); }, []);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const scene = appState.scenes[editingPreset];
     const templates = scene?.presetTemplates;
     const next = templates && templates.length > 0 ? templates[0] : 0;
     setSelectedTemplate(next);
     onActiveTemplateChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingPreset]); // Only reset when switching scenes, not on every slider change
 
   const preset = appState.scenes[editingPreset];

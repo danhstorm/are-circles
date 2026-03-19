@@ -1,5 +1,5 @@
 import {
-  MusicConfig, MidConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse, DrumRipple,
+  MusicConfig, MidConfig, ScaleType, MidSound, SpeedSubdivision, SwirlImpulse,
 } from '@/types';
 import { DrumMachine, defaultDrumConfig } from './drums';
 
@@ -167,6 +167,7 @@ export class MusicEngine {
       if (!this.ctx) {
         this.ctx = new AudioContext();
         this.buildGraph();
+        this.drums.init(this.ctx, this.masterGain!, this.delayNode);
       }
       if (this.ctx.state === 'suspended') {
         await this.ctx.resume();
@@ -213,6 +214,7 @@ export class MusicEngine {
       const oldBeatDur = 60 / old.tempo;
       const currentBeat = (now - this.beatOrigin) / oldBeatDur;
       this.beatOrigin = now - currentBeat * (60 / c.tempo);
+      this.drums.rebaseBeat(old.tempo, c.tempo, this.beatOrigin, now);
     }
     // On speed change, snap instrument to next grid-aligned beat
     if (this.ctx && this._playing) {
@@ -259,11 +261,17 @@ export class MusicEngine {
         this.padNextChordBeat = currentBeat + c.pad.chordInterval * 4;
       }
     }
+    // Drums: sync config, rebase on speed change
+    this.drums.updateConfig(c.drums);
+    if (this.ctx && this._playing && c.drums.speed !== old.drums.speed) {
+      this.drums.rebaseSpeed(this.beatOrigin, c.tempo, this.ctx.currentTime);
+    }
   }
 
   setInstrumentEnabled(inst: keyof typeof this.instEnabled, on: boolean) {
     this.instEnabled[inst] = on;
     if (!on && inst === 'pad') this.fadePadOut();
+    if (inst === 'drums') this.drums.setEnabled(on);
   }
 
   fadeIn(dur = 2) {
@@ -304,6 +312,7 @@ export class MusicEngine {
   destroy() {
     if (this.schedulerTimer) clearInterval(this.schedulerTimer);
     this.killPad();
+    this.drums.destroy();
     this.ctx?.close();
     this.ctx = null;
     this._playing = false;
@@ -436,6 +445,9 @@ export class MusicEngine {
       const currentBeat = (now - this.beatOrigin) / (60 / c.tempo);
       if (this.padNextChordBeat < currentBeat) this.padNextChordBeat = currentBeat;
     }
+
+    // Drums: delegate to DrumMachine (always called so it tracks beat position)
+    this.drums.schedule(this.beatOrigin, c.tempo, now, ahead);
   }
 
   // ─── Pling ───

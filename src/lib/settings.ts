@@ -1,6 +1,35 @@
-import { Settings, AppState, Scene, MediaPlayMode, MediaOverride } from '@/types';
+import { Settings, AppState, Scene, MediaPlayMode, MediaOverride, DrumConfig, DRUM_SOUND_NAMES, DrumReactionGroup } from '@/types';
 import { DEFAULT_PALETTE, templatePresets } from './presets';
 import { defaultMusicConfig } from '@/engine/music';
+
+function deepMergeDrums(base: DrumConfig, saved?: Partial<DrumConfig>): DrumConfig {
+  if (!saved) return structuredClone(base);
+  const merged: DrumConfig = {
+    volume: saved.volume ?? base.volume,
+    speed: saved.speed ?? base.speed,
+    autoSpeed: saved.autoSpeed ?? base.autoSpeed,
+    sounds: { ...base.sounds },
+    reactions: { ...base.reactions },
+  };
+  if (saved.sounds) {
+    for (const name of DRUM_SOUND_NAMES) {
+      if (saved.sounds[name]) {
+        merged.sounds[name] = { ...base.sounds[name], ...saved.sounds[name] };
+        if (!Array.isArray(merged.sounds[name].pattern) || merged.sounds[name].pattern.length !== 16) {
+          merged.sounds[name].pattern = Array(16).fill(false);
+        }
+      }
+    }
+  }
+  if (saved.reactions) {
+    for (const group of ['low', 'mid', 'high'] as DrumReactionGroup[]) {
+      if (saved.reactions[group]) {
+        merged.reactions[group] = { ...base.reactions[group], ...saved.reactions[group] };
+      }
+    }
+  }
+  return merged;
+}
 
 const STATE_KEY = 'are-circles-state';
 const OLD_SETTINGS_KEY = 'are-circles-settings';
@@ -181,6 +210,7 @@ export function loadAppState(): AppState {
           mid1: { ...base.music.mid1, ...(parsed.music.mid1 || {}) },
           mid2: { ...base.music.mid2, ...(parsed.music.mid2 || {}) },
           pad: { ...base.music.pad, ...(parsed.music.pad || {}) },
+          drums: deepMergeDrums(base.music.drums, parsed.music.drums),
           visualReactions: { ...base.music.visualReactions, ...(parsed.music.visualReactions || {}) },
         };
       }
@@ -275,6 +305,7 @@ export async function syncWithServer(current: AppState): Promise<AppState> {
           mid1: { ...base.music.mid1, ...(server.music.mid1 || {}) },
           mid2: { ...base.music.mid2, ...(server.music.mid2 || {}) },
           pad: { ...base.music.pad, ...(server.music.pad || {}) },
+          drums: deepMergeDrums(base.music.drums, server.music.drums),
           visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
         };
       }
@@ -333,6 +364,7 @@ export function resetToServerDefaults(): Promise<AppState> {
           mid1: { ...base.music.mid1, ...(server.music.mid1 || {}) },
           mid2: { ...base.music.mid2, ...(server.music.mid2 || {}) },
           pad: { ...base.music.pad, ...(server.music.pad || {}) },
+          drums: deepMergeDrums(base.music.drums, server.music.drums),
           visualReactions: { ...base.music.visualReactions, ...(server.music.visualReactions || {}) },
         };
       }

@@ -1,5 +1,5 @@
 import { createNoise3D } from 'simplex-noise';
-import { Particle, Settings, AudioData, GravityShape, SwirlImpulse } from '@/types';
+import { Particle, Settings, AudioData, GravityShape, SwirlImpulse, DrumRipple } from '@/types';
 import { AudioEngine } from './audio';
 import { MediaEngine } from './media';
 
@@ -30,6 +30,7 @@ export class CirclesRenderer {
   private cursorDown = false;
   transitionTiming = { enterSpeed: 1.0, exitSpeed: 1.0, gridBlendIn: 0.8, gridBlendOut: 0.8 };
   private swirlImpulses: SwirlImpulse[] = [];
+  private drumRipples: DrumRipple[] = [];
   private musicSizePulse = 0;
   private targetSettings: Settings | null = null;
   private transitionStart: Settings | null = null;
@@ -620,6 +621,11 @@ export class CirclesRenderer {
     for (const imp of impulses) this.swirlImpulses.push(imp);
   }
 
+  addDrumRipples(ripples: DrumRipple[]) {
+    for (const r of ripples) this.drumRipples.push(r);
+    if (this.drumRipples.length > 16) this.drumRipples.length = 16;
+  }
+
   setMusicSizePulse(v: number) {
     this.musicSizePulse = v;
   }
@@ -939,7 +945,6 @@ export class CirclesRenderer {
     const sizeRange = effectiveMaxSize - effectiveMinSize;
 
     // Grid size range for media animation
-    const gridEffMinSize = s.gridMinSize * vs;
     const gridEffMaxSize = s.gridMaxSize * vs;
 
     // Wave direction vector
@@ -966,6 +971,48 @@ export class CirclesRenderer {
         this.swirlImpulses.splice(si, 1);
       }
     }
+
+    // Age drum ripples once per frame (expand radius, age out)
+    let rippleCount = this.drumRipples.length;
+    if (rippleCount > 0) {
+      for (let ri = rippleCount - 1; ri >= 0; ri--) {
+        const rip = this.drumRipples[ri];
+        rip.age += dt;
+        rip.radius += rip.speed * dt;
+        if (rip.age >= rip.maxAge || rip.radius >= rip.maxRadius) {
+          this.drumRipples[ri] = this.drumRipples[--rippleCount];
+          this.drumRipples.length = rippleCount;
+        }
+      }
+      if (this.drumRipples.length > 16) this.drumRipples.length = 16;
+    }
+    // Precompute ripple pixel-space data for the particle loop (only when ripples exist)
+    const hasRipples = this.drumRipples.length > 0;
+    const vDiag = hasRipples ? Math.sqrt(w * w + h * h) : 0;
+    const ripRx: number[] = [];
+    const ripRy: number[] = [];
+    const ripRingR: number[] = [];
+    const ripRingW: number[] = [];
+    const ripRingWSq: number[] = [];
+    const ripLifeFade: number[] = [];
+    const ripStr: number[] = [];
+    const ripSizeAmt: number[] = [];
+    const ripPosAmt: number[] = [];
+    for (let ri = 0; ri < this.drumRipples.length; ri++) {
+      const rip = this.drumRipples[ri];
+      const ringR = rip.radius * vDiag;
+      const ringW = ringR * 0.25 + 20;
+      ripRx[ri] = rip.x * w;
+      ripRy[ri] = rip.y * h;
+      ripRingR[ri] = ringR;
+      ripRingW[ri] = ringW;
+      ripRingWSq[ri] = (ringR + ringW) * (ringR + ringW);
+      ripLifeFade[ri] = 1 - (rip.age / rip.maxAge);
+      ripStr[ri] = rip.strength;
+      ripSizeAmt[ri] = rip.sizeAmount;
+      ripPosAmt[ri] = rip.positionAmount;
+    }
+    const ripLen = this.drumRipples.length;
 
     for (let pi = 0; pi < this.particles.length; pi++) {
       const p = this.particles[pi];
@@ -1116,6 +1163,29 @@ export class CirclesRenderer {
         }
       }
 
+      // ===== DRUM RIPPLES (concentric ring waves) =====
+      let drumSizeMod = 0;
+      if (hasRipples) {
+        for (let ri = 0; ri < ripLen; ri++) {
+          const rdx = p.x - ripRx[ri];
+          const rdy = p.y - ripRy[ri];
+          const distSq = rdx * rdx + rdy * rdy;
+          if (distSq > ripRingWSq[ri]) continue;
+          const dist = Math.sqrt(distSq);
+          const distFromRing = Math.abs(dist - ripRingR[ri]);
+          if (distFromRing >= ripRingW[ri]) continue;
+          const proximity = 1 - distFromRing / ripRingW[ri];
+          const strength = proximity * ripLifeFade[ri] * ripStr[ri];
+          if (dist > 1 && ripPosAmt[ri] > 0.001) {
+            const invDist = 1 / dist;
+            const wave = Math.sin((dist / ripRingW[ri]) * Math.PI) * strength * ripPosAmt[ri];
+            p.vx += rdx * invDist * wave * 400 * vs * dt;
+            p.vy += rdy * invDist * wave * 400 * vs * dt;
+          }
+          drumSizeMod += strength * ripSizeAmt[ri];
+        }
+      }
+
       // ===== SIZE: patterns drive size =====
       let sizeMod = 0.5;
       const vp = Math.sqrt(w * w + h * h);
@@ -1139,7 +1209,7 @@ export class CirclesRenderer {
       }
 
       sizeMod = Math.max(0, Math.min(1, sizeMod));
-      const patternSize = effectiveMinSize + sizeMod * sizeRange;
+      const patternSize = (effectiveMinSize + sizeMod * sizeRange) * (1 + drumSizeMod);
 
       // Media brightness-driven size (using grid size range, not normal range)
       const mediaBright = this.media.getUnfadedBrightness(

@@ -12,12 +12,6 @@
     "invert": false
   },
   {
-    "src": "/media/adobe-particles-burst.mp4",
-    "type": "video",
-    "playMode": "loop",
-    "invert": false
-  },
-  {
     "src": "/media/adobe-spiral.mp4",
     "type": "video",
     "playMode": "loop",
@@ -30,7 +24,7 @@
     "invert": false
   },
   {
-    "src": "/media/ballerina-dancing.mp4",
+    "src": "/media/bat-flight.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false
@@ -42,13 +36,67 @@
     "invert": false
   },
   {
-    "src": "/media/black-hole.mp4",
+    "src": "/media/bubbles-overlay.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/bw-studio-portrait.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/campfire.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/cell-division.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/dancer-silhouette.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/deep-black-hole.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false
   },
   {
     "src": "/media/dna-chain.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/dust-scatter.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/fish.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/fluffy-balls.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/fluid-vj.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false
@@ -72,13 +120,103 @@
     "invert": false
   },
   {
-    "src": "/media/scifi-character.mp4",
+    "src": "/media/horse-rearing.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/jellyfish.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/light-beam-woman.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/light-trails.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/lightning-bolt.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/lone-tree.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/neon-colors.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/orange-dust-explosion.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/pills-capsule.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/powder-explosion.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/retro-woman.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/shadow-boxing.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/shark-fin.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false
   },
   {
     "src": "/media/sine-curtain.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/skull.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/sphere-rings.mp4",
+    "type": "video",
+    "playMode": "loop",
+    "invert": false
+  },
+  {
+    "src": "/media/venice-woman.mp4",
     "type": "video",
     "playMode": "loop",
     "invert": false

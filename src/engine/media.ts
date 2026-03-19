@@ -28,6 +28,7 @@ export class MediaEngine {
   private invertMap: Map<string, boolean> = new Map();
   private zoomToFitMap: Map<string, boolean> = new Map();
   private retainVideo = false;
+  private loadId = 0;
 
   get intensity() {
     return this.fadeProgress;
@@ -122,7 +123,7 @@ export class MediaEngine {
   }
 
   triggerNext() {
-    if (this.items.length === 0 || !this.enabled) return;
+    if (this.items.length === 0) return;
     if (this.fadeDirection === 'in' || this.fadeDirection === 'hold') {
       this.fadeDirection = 'out';
     } else {
@@ -131,7 +132,7 @@ export class MediaEngine {
   }
 
   triggerByIndex(idx: number) {
-    if (idx < 0 || idx >= this.items.length || !this.enabled) return;
+    if (idx < 0 || idx >= this.items.length) return;
     this.cleanupCurrent();
     this.queuedIndex = -1;
     this.currentIndex = idx;
@@ -154,6 +155,7 @@ export class MediaEngine {
   }
 
   private cleanupCurrent() {
+    this.loadId++;
     if (this.videoEl) {
       this.videoEl.playbackRate = 1;
       this.videoEl.pause();
@@ -167,11 +169,11 @@ export class MediaEngine {
   }
 
   private loadMedia(item: MediaItem) {
-    if (!this.enabled) return;
     this.cleanupCurrent();
     this.currentItem = item;
     this.pingpongReverse = false;
 
+    const myLoadId = ++this.loadId;
     const v = document.createElement('video');
     v.src = item.src;
     v.crossOrigin = 'anonymous';
@@ -181,6 +183,7 @@ export class MediaEngine {
     if (item.playMode === 'pingpong') {
       v.loop = false;
       v.onended = () => {
+        if (this.loadId !== myLoadId) return;
         if (this.currentItem?.playMode === 'pingpong' && !this.pingpongReverse) {
           this.pingpongReverse = true;
           this.pingpongTime = v.duration;
@@ -189,7 +192,6 @@ export class MediaEngine {
             v.playbackRate = -1;
             v.play().catch(() => { v.pause(); });
           } catch {
-            // Browser doesn't support negative playbackRate; manual seeking fallback
             v.pause();
           }
         }
@@ -199,11 +201,26 @@ export class MediaEngine {
     }
 
     v.onloadeddata = () => {
+      if (this.loadId !== myLoadId) {
+        v.pause();
+        v.removeAttribute('src');
+        v.load();
+        return;
+      }
       this.videoEl = v;
       v.play();
+      // Sample first frame immediately so brightness is ready before fade-in starts
+      this.sampleBrightness();
       this.fadeDirection = 'in';
       this.fadeProgress = 0;
       this.holdTimer = 0;
+    };
+    v.onerror = () => {
+      if (this.loadId !== myLoadId) return;
+      // Failed to load -- reset to idle so auto-trigger can try next video
+      this.cleanupCurrent();
+      this.fadeDirection = 'idle';
+      this.idleTimer = 0;
     };
     v.load();
   }
@@ -405,6 +422,8 @@ export class MediaEngine {
       }
     } else {
       if (!this.enabled) return;
+      // Don't re-trigger while a video is loading (currentItem set but videoEl not yet)
+      if (this.currentItem) return;
       this.idleTimer += dt;
       if (this.idleTimer >= this.nextInterval && this.items.length > 0) {
         this.pickNext();

@@ -1,5 +1,5 @@
 {
-  "version": "1i5ktz",
+  "version": "gxk9j0",
   "activePreset": 0,
   "scenes": [
     {
@@ -32,7 +32,8 @@
         "pling": true,
         "mid1": true,
         "mid2": true,
-        "pad": true
+        "pad": true,
+        "drums": false
       },
       "presetTemplates": [
         0
@@ -62,12 +63,13 @@
         "depthOfField": 0.5
       },
       "mediaEnabled": false,
-      "soundEnabled": false,
+      "soundEnabled": true,
       "musicInstruments": {
         "pling": true,
         "mid1": true,
         "mid2": true,
-        "pad": true
+        "pad": true,
+        "drums": false
       },
       "presetTemplates": [
         1,
@@ -101,12 +103,13 @@
         "depthOfField": 0.3
       },
       "mediaEnabled": false,
-      "soundEnabled": false,
+      "soundEnabled": true,
       "musicInstruments": {
         "pling": true,
         "mid1": true,
         "mid2": true,
-        "pad": true
+        "pad": true,
+        "drums": false
       },
       "presetTemplates": [
         8,
@@ -142,7 +145,7 @@
         "micGain": 0.5,
         "imageIntervalMin": 5,
         "imageIntervalMax": 9,
-        "imageFadeDuration": 3,
+        "imageFadeDuration": 2.5,
         "imageIntensity": 0.5,
         "mediaEnabled": false,
         "hueVariation": 10,
@@ -479,7 +482,7 @@
     "/media/adobe-liquid-swirl.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 0.4,
+      "intensity": 0.7,
       "contrast": 0.2,
       "zoomToFit": true
     },
@@ -493,7 +496,7 @@
     "/media/arm-movement.mp4": {
       "playMode": "loop",
       "invert": true,
-      "intensity": 0.45,
+      "intensity": 0.7,
       "contrast": 0,
       "zoomToFit": true
     },
@@ -574,7 +577,7 @@
     "/media/hand-gesture.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 0.8,
+      "intensity": 0.95,
       "contrast": 0,
       "zoomToFit": true
     },
@@ -593,7 +596,7 @@
     "/media/scifi-character.mp4": {
       "playMode": "loop",
       "invert": false,
-      "intensity": 0.8,
+      "intensity": 0,
       "contrast": 0,
       "zoomToFit": true
     },
@@ -653,23 +656,105 @@
       "invert": false,
       "intensity": 0.35,
       "contrast": 0
+    },
+    "/media/orange-dust-explosion.mp4": {
+      "playMode": "loop",
+      "invert": true,
+      "zoomToFit": false,
+      "intensity": 0.7,
+      "contrast": 0
+    },
+    "/media/white-rose.mp4": {
+      "playMode": "pingpong",
+      "invert": false,
+      "intensity": 0.85,
+      "contrast": 0,
+      "zoomToFit": true
+    },
+    "/media/skull.mp4": {
+      "playMode": "pingpong",
+      "invert": false,
+      "intensity": 0.85,
+      "contrast": 0,
+      "zoomToFit": true
+    },
+    "/media/jellyfish.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 0.95,
+      "contrast": 0.25,
+      "zoomToFit": false
+    },
+    "/media/shadow-boxing.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 1.2,
+      "contrast": 0,
+      "zoomToFit": false
+    },
+    "/media/bat-flight.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 1.15,
+      "contrast": 0,
+      "zoomToFit": false
+    },
+    "/media/bw-studio-portrait.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 1.1,
+      "contrast": 0,
+      "zoomToFit": false
+    },
+    "/media/campfire.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 0.5,
+      "contrast": 0,
+      "zoomToFit": false
+    },
+    "/media/paint-splash.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 1.45,
+      "contrast": 0,
+      "zoomToFit": false
+    },
+    "/media/prism-lights.mp4": {
+      "playMode": "loop",
+      "invert": false,
+      "intensity": 1,
+      "contrast": 0,
+      "zoomToFit": false
     }
   },
   "mediaOrder": [
-    "/media/adobe-liquid-swirl.mp4",
-    "/media/ballerina-dancing.mp4",
-    "/media/4kq40epqpu_360.mp4",
-    "/media/glowing-liquid.mp4",
-    "/media/dna-chain.mp4",
-    "/media/scifi-character.mp4",
     "/media/sine-curtain.mp4",
+    "/media/horse-rearing.mp4",
     "/media/hand-gesture.mp4",
+    "/media/adobe-liquid-swirl.mp4",
+    "/media/dna-chain.mp4",
+    "/media/skull.mp4",
+    "/media/4kq40epqpu_360.mp4",
+    "/media/explosion-bloom.mp4",
+    "/media/shadow-boxing.mp4",
+    "/media/jellyfish.mp4",
+    "/media/bat-flight.mp4",
+    "/media/glowing-liquid.mp4",
+    "/media/bw-studio-portrait.mp4",
+    "/media/campfire.mp4",
+    "/media/scifi-character.mp4",
     "/media/adobe-spiral.mp4",
     "/media/arm-movement.mp4",
-    "/media/bird-landing.mp4",
     "/media/gradient-grid.mp4",
-    "/media/adobe-particles-burst.mp4",
-    "/media/black-hole.mp4"
+    "/media/deep-black-hole.mp4",
+    "/media/fish.mp4",
+    "/media/light-beam-woman.mp4",
+    "/media/paint-splash.mp4",
+    "/media/prism-lights.mp4",
+    "/media/lone-tree.mp4",
+    "/media/orange-dust-explosion.mp4",
+    "/media/shark-fin.mp4"
   ],
   "hiddenMedia": [
     "/media/tunnel-zoom.mp4",
@@ -698,9 +783,25 @@
     "/media/neon-colors.mp4",
     "/media/powder-explosion.mp4",
     "/media/bubbles-overlay.mp4",
-    "/media/dust-scatter.mp4"
+    "/media/dust-scatter.mp4",
+    "/media/bird-landing.mp4",
+    "/media/invite-animation.mp4",
+    "/media/adobe-shapes.mp4",
+    "/media/black-hole.mp4",
+    "/media/adobe-abstract.mp4",
+    "/media/sparkle-ornament.mp4",
+    "/media/ballerina-dancing.mp4",
+    "/media/mango-display.mp4",
+    "/media/fireworks.mp4",
+    "/media/adobe-particles-burst.mp4",
+    "/media/adobe-wave.mp4",
+    "/media/venice-woman.mp4",
+    "/media/white-rose.mp4",
+    "/media/scifi-character.mp4",
+    "/media/paint-splash.mp4",
+    "/media/explosion-bloom.mp4"
   ],
-  "mediaGridColumns": 99,
+  "mediaGridColumns": 113,
   "transitionSpeed": 3,
   "transitionTiming": {
     "enterSpeed": 0.3,
@@ -708,7 +809,7 @@
     "gridBlendIn": 1.6,
     "gridBlendOut": 1.5
   },
-  "soundMuted": true,
+  "soundMuted": false,
   "music": {
     "scale": "pentatonic-minor",
     "tempo": 61,
@@ -795,6 +896,250 @@
       "octaveLow": 2,
       "octaveHigh": 4,
       "detune": 0
+    },
+    "drums": {
+      "volume": 1,
+      "speed": "1/16",
+      "autoSpeed": 0.04,
+      "sounds": {
+        "kick": {
+          "pattern": [
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "volume": 0.8,
+          "decayMin": 0.61,
+          "decayMax": 1,
+          "pitchMin": 0.4,
+          "pitchMax": 1.7,
+          "delayMin": 0.55,
+          "delayMax": 0.9,
+          "flangerMin": 0,
+          "flangerMax": 0.2,
+          "chorusMin": 0,
+          "chorusMax": 0.6
+        },
+        "woodblock1": {
+          "pattern": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "volume": 0.6,
+          "decayMin": 0.5,
+          "decayMax": 0.5,
+          "pitchMin": 1,
+          "pitchMax": 1,
+          "delayMin": 0,
+          "delayMax": 0,
+          "flangerMin": 0,
+          "flangerMax": 0,
+          "chorusMin": 0,
+          "chorusMax": 0
+        },
+        "woodblock2": {
+          "pattern": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false
+          ],
+          "volume": 0.6,
+          "decayMin": 0.5,
+          "decayMax": 0.5,
+          "pitchMin": 1,
+          "pitchMax": 1,
+          "delayMin": 0,
+          "delayMax": 0,
+          "flangerMin": 0,
+          "flangerMax": 0,
+          "chorusMin": 0,
+          "chorusMax": 0
+        },
+        "clap": {
+          "pattern": [
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            false
+          ],
+          "volume": 0.5,
+          "decayMin": 0.21,
+          "decayMax": 0.74,
+          "pitchMin": 1,
+          "pitchMax": 1.9,
+          "delayMin": 0,
+          "delayMax": 0.35,
+          "flangerMin": 0,
+          "flangerMax": 0.7,
+          "chorusMin": 0,
+          "chorusMax": 0.4
+        },
+        "snare": {
+          "pattern": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "volume": 0.6,
+          "decayMin": 0.5,
+          "decayMax": 0.5,
+          "pitchMin": 1,
+          "pitchMax": 1,
+          "delayMin": 0,
+          "delayMax": 0,
+          "flangerMin": 0,
+          "flangerMax": 0,
+          "chorusMin": 0,
+          "chorusMax": 0
+        },
+        "hihat": {
+          "pattern": [
+            false,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            true,
+            false,
+            false,
+            true,
+            false
+          ],
+          "volume": 0.4,
+          "decayMin": 0.5,
+          "decayMax": 0.5,
+          "pitchMin": 1,
+          "pitchMax": 1,
+          "delayMin": 0,
+          "delayMax": 0,
+          "flangerMin": 0,
+          "flangerMax": 0,
+          "chorusMin": 0,
+          "chorusMax": 0
+        },
+        "gong": {
+          "pattern": [
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "volume": 0.7,
+          "decayMin": 0.5,
+          "decayMax": 0.89,
+          "pitchMin": 1.4,
+          "pitchMax": 1.6,
+          "delayMin": 0.55,
+          "delayMax": 0.95,
+          "flangerMin": 0.5,
+          "flangerMax": 0.8,
+          "chorusMin": 0,
+          "chorusMax": 0.3
+        }
+      },
+      "reactions": {
+        "low": {
+          "waveStrength": 0.65,
+          "waveSpeed": 3.1,
+          "sizeAmount": 0.7,
+          "positionAmount": 0.41
+        },
+        "mid": {
+          "waveStrength": 0.5,
+          "waveSpeed": 2,
+          "sizeAmount": 0.2,
+          "positionAmount": 0.1
+        },
+        "high": {
+          "waveStrength": 0.1,
+          "waveSpeed": 4,
+          "sizeAmount": 0.1,
+          "positionAmount": 0.05
+        }
+      }
     },
     "visualReactions": {
       "swirlStrength": 0.85,

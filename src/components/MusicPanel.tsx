@@ -1,13 +1,17 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
-import { AppState, ScaleType, MidSound, SpeedSubdivision, MusicConfig } from '@/types';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
+import {
+  AppState, ScaleType, MidSound, SpeedSubdivision, MusicConfig,
+  DrumSoundName, DrumReactionGroup, DRUM_SOUND_NAMES, DRUM_LABELS,
+} from '@/types';
 import { synthSkins } from './retroDesignSystem';
 
 interface Props {
   visible: boolean;
   appState: AppState;
   editingPreset: number;
+  drumStep: number;
   onUpdate: (updater: (prev: AppState) => AppState) => void;
 }
 
@@ -22,6 +26,7 @@ const SECTION_ACCENTS = {
   plong: synthSkins.plong.primary,
   bong: synthSkins.bong.primary,
   pad: synthSkins.pad.primary,
+  drums: synthSkins.drums.primary,
   vr: synthSkins.vr.primary,
 } as const;
 
@@ -316,7 +321,7 @@ function SoundButtons({ value, onChange, accent }: {
   );
 }
 
-export default function MusicPanel({ visible, appState, editingPreset, onUpdate }: Props) {
+export default function MusicPanel({ visible, appState, editingPreset, drumStep, onUpdate }: Props) {
   const music = appState.music;
   const preset = appState.scenes[editingPreset];
 
@@ -327,6 +332,8 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
   const [plongOpen, setPlongOpen] = useState(false);
   const [bongOpen, setBongOpen] = useState(false);
   const [padOpen, setPadOpen] = useState(false);
+  const [drumsOpen, setDrumsOpen] = useState(false);
+  const [expandedDrum, setExpandedDrum] = useState<DrumSoundName | null>(null);
   const [vrOpen, setVrOpen] = useState(false);
 
   useEffect(() => {
@@ -376,7 +383,7 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
     onUpdate((prev) => ({ ...prev, music: { ...prev.music, [inst]: { ...prev.music[inst], ...updates } } }));
   };
 
-  const setPresetInst = (inst: 'pling' | 'mid1' | 'mid2' | 'pad', enabled: boolean) => {
+  const setPresetInst = (inst: 'pling' | 'mid1' | 'mid2' | 'pad' | 'drums', enabled: boolean) => {
     onUpdate((prev) => {
       const scenes = [...prev.scenes] as AppState['scenes'];
       scenes[editingPreset] = {
@@ -385,6 +392,66 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
       };
       return { ...prev, scenes };
     });
+  };
+
+  const setDrums = (key: string, value: unknown) => {
+    onUpdate((prev) => ({ ...prev, music: { ...prev.music, drums: { ...prev.music.drums, [key]: value } } }));
+  };
+
+  const setDrumSound = (name: DrumSoundName, key: string, value: unknown) => {
+    onUpdate((prev) => ({
+      ...prev,
+      music: {
+        ...prev.music,
+        drums: {
+          ...prev.music.drums,
+          sounds: { ...prev.music.drums.sounds, [name]: { ...prev.music.drums.sounds[name], [key]: value } },
+        },
+      },
+    }));
+  };
+
+  const setDrumSoundMulti = (name: DrumSoundName, updates: Record<string, unknown>) => {
+    onUpdate((prev) => ({
+      ...prev,
+      music: {
+        ...prev.music,
+        drums: {
+          ...prev.music.drums,
+          sounds: { ...prev.music.drums.sounds, [name]: { ...prev.music.drums.sounds[name], ...updates } },
+        },
+      },
+    }));
+  };
+
+  const toggleStep = (name: DrumSoundName, step: number) => {
+    onUpdate((prev) => {
+      const pattern = [...prev.music.drums.sounds[name].pattern];
+      pattern[step] = !pattern[step];
+      return {
+        ...prev,
+        music: {
+          ...prev.music,
+          drums: {
+            ...prev.music.drums,
+            sounds: { ...prev.music.drums.sounds, [name]: { ...prev.music.drums.sounds[name], pattern } },
+          },
+        },
+      };
+    });
+  };
+
+  const setDrumReaction = (group: DrumReactionGroup, key: string, value: number) => {
+    onUpdate((prev) => ({
+      ...prev,
+      music: {
+        ...prev.music,
+        drums: {
+          ...prev.music.drums,
+          reactions: { ...prev.music.drums.reactions, [group]: { ...prev.music.drums.reactions[group], [key]: value } },
+        },
+      },
+    }));
   };
 
   const setVR = (key: string, value: number) => {
@@ -506,6 +573,122 @@ export default function MusicPanel({ visible, appState, editingPreset, onUpdate 
                 <RangeSlider label="Octave" low={music.pad.octaveLow} high={music.pad.octaveHigh} min={1} max={5} step={1} onChange={(low, high) => setInstMulti('pad', { octaveLow: low, octaveHigh: high })} color={SECTION_ACCENTS.pad} />
                 <Slider label="Filter" value={music.pad.filterCutoff} min={100} max={4000} step={50} onChange={(value) => setInst('pad', 'filterCutoff', value)} color={SECTION_ACCENTS.pad} />
                 <Slider label="Reverb" value={music.pad.reverb} min={0} max={1} step={0.05} onChange={(value) => setInst('pad', 'reverb', value)} color={SECTION_ACCENTS.pad} />
+              </Card>
+
+              <Card
+                title="Drums"
+                accent={SECTION_ACCENTS.drums}
+                collapsed={!drumsOpen}
+                onToggle={() => setDrumsOpen((value) => !value)}
+                action={<ToggleChip enabled={preset.musicInstruments.drums} onToggle={(value) => setPresetInst('drums', value)} accent={SECTION_ACCENTS.drums} />}
+              >
+                <Slider label="Volume" value={music.drums.volume} min={0} max={1} step={0.05} onChange={(value) => setDrums('volume', value)} color={SECTION_ACCENTS.drums} />
+                <SpeedButtons value={music.drums.speed} onChange={(value) => setDrums('speed', value)} accent={SECTION_ACCENTS.drums} />
+
+                {/* 16-step grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '32px repeat(16, 1fr)', gap: 1, padding: '4px 0' }}>
+                  {/* Beat markers row */}
+                  <div />
+                  {Array.from({ length: 16 }, (_, i) => (
+                    <div
+                      key={`beat-${i}`}
+                      style={{
+                        height: 2,
+                        background: drumStep === i ? SECTION_ACCENTS.drums : i % 4 === 0 ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.06)',
+                        borderRadius: 1,
+                        transition: 'background 0.05s',
+                      }}
+                    />
+                  ))}
+
+                  {DRUM_SOUND_NAMES.map((name) => {
+                    const sc = music.drums.sounds[name];
+                    const isExpanded = expandedDrum === name;
+                    return (
+                      <React.Fragment key={name}>
+                        <button
+                          onClick={() => setExpandedDrum(isExpanded ? null : name)}
+                          className="text-left cursor-pointer truncate"
+                          style={{
+                            fontSize: 8,
+                            lineHeight: '14px',
+                            color: isExpanded ? SECTION_ACCENTS.drums : 'rgba(255,255,255,0.45)',
+                            fontFamily: '"Courier New", monospace',
+                            fontWeight: 600,
+                            letterSpacing: '0.02em',
+                          }}
+                        >
+                          {DRUM_LABELS[name]}
+                        </button>
+                        {Array.from({ length: 16 }, (_, step) => {
+                          const active = sc.pattern[step];
+                          const isPlayhead = drumStep === step;
+                          return (
+                            <button
+                              key={step}
+                              onClick={() => toggleStep(name, step)}
+                              className="cursor-pointer"
+                              style={{
+                                aspectRatio: '1',
+                                minHeight: 10,
+                                background: active
+                                  ? isPlayhead ? '#fff' : SECTION_ACCENTS.drums
+                                  : isPlayhead ? `${SECTION_ACCENTS.drums}40` : step % 4 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${active ? SECTION_ACCENTS.drums : 'rgba(255,255,255,0.08)'}`,
+                                borderRadius: 1,
+                                transition: 'background 0.06s',
+                              }}
+                            />
+                          );
+                        })}
+                        {/* Expanded per-sound controls */}
+                        {isExpanded && (
+                          <>
+                            <div style={{ gridColumn: '1 / -1', padding: '2px 0' }}>
+                              <Slider label="Volume" value={sc.volume} min={0} max={1} step={0.05} onChange={(v) => setDrumSound(name, 'volume', v)} color={SECTION_ACCENTS.drums} />
+                              <RangeSlider label="Decay" low={sc.decayMin} high={sc.decayMax} min={0.01} max={1} step={0.01} onChange={(lo, hi) => setDrumSoundMulti(name, { decayMin: lo, decayMax: hi })} color={SECTION_ACCENTS.drums} />
+                              <RangeSlider label="Pitch" low={sc.pitchMin} high={sc.pitchMax} min={0.25} max={4} step={0.05} onChange={(lo, hi) => setDrumSoundMulti(name, { pitchMin: lo, pitchMax: hi })} color={SECTION_ACCENTS.drums} />
+                              <RangeSlider label="Delay" low={sc.delayMin} high={sc.delayMax} min={0} max={1} step={0.05} onChange={(lo, hi) => setDrumSoundMulti(name, { delayMin: lo, delayMax: hi })} color={SECTION_ACCENTS.drums} />
+                              <RangeSlider label="Flanger" low={sc.flangerMin} high={sc.flangerMax} min={0} max={1} step={0.05} onChange={(lo, hi) => setDrumSoundMulti(name, { flangerMin: lo, flangerMax: hi })} color={SECTION_ACCENTS.drums} />
+                              <RangeSlider label="Chorus" low={sc.chorusMin} high={sc.chorusMax} min={0} max={1} step={0.05} onChange={(lo, hi) => setDrumSoundMulti(name, { chorusMin: lo, chorusMax: hi })} color={SECTION_ACCENTS.drums} />
+                            </div>
+                          </>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+
+                <AutoSection accent={SECTION_ACCENTS.drums}>
+                  <Slider label="Auto Speed" value={music.drums.autoSpeed} min={0.01} max={0.5} step={0.01} onChange={(value) => setDrums('autoSpeed', value)} color={SECTION_ACCENTS.drums} />
+                </AutoSection>
+
+                {/* Drum wave reactions by group */}
+                <div
+                  style={{
+                    padding: '4px 6px',
+                    marginTop: 2,
+                    background: 'rgba(0,0,0,0.25)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  <div className="text-[10px] uppercase tracking-widest font-medium text-white/30" style={{ marginBottom: 4 }}>
+                    Wave Reactions
+                  </div>
+                  {(['low', 'mid', 'high'] as DrumReactionGroup[]).map((group) => {
+                    const rc = music.drums.reactions[group];
+                    const groupLabel = group === 'low' ? 'Low (Kick/Gong)' : group === 'mid' ? 'Mid (Snare/Clap/Wood)' : 'High (HiHat)';
+                    return (
+                      <div key={group} style={{ marginBottom: 4 }}>
+                        <div className="text-[9px] uppercase tracking-wide text-white/25" style={{ marginBottom: 2 }}>{groupLabel}</div>
+                        <Slider label="Strength" value={rc.waveStrength} min={0} max={1} step={0.05} onChange={(v) => setDrumReaction(group, 'waveStrength', v)} color={SECTION_ACCENTS.drums} />
+                        <Slider label="Speed" value={rc.waveSpeed} min={0.1} max={8} step={0.1} onChange={(v) => setDrumReaction(group, 'waveSpeed', v)} color={SECTION_ACCENTS.drums} />
+                        <Slider label="Size Mod" value={rc.sizeAmount} min={0} max={1} step={0.05} onChange={(v) => setDrumReaction(group, 'sizeAmount', v)} color={SECTION_ACCENTS.drums} />
+                        <Slider label="Position" value={rc.positionAmount} min={0} max={0.5} step={0.01} onChange={(v) => setDrumReaction(group, 'positionAmount', v)} color={SECTION_ACCENTS.drums} />
+                      </div>
+                    );
+                  })}
+                </div>
               </Card>
 
               <Card title="Visual Reactions" accent={SECTION_ACCENTS.vr} collapsed={!vrOpen} onToggle={() => setVrOpen((value) => !value)}>
