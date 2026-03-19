@@ -108,7 +108,7 @@ export interface MediaItem {
 
 export type ScaleType = 'pentatonic-major' | 'pentatonic-minor';
 export type MidSound = 'xylophone' | 'rhodes' | 'breathy' | 'bell' | 'kalimba' | 'glass';
-export type SpeedSubdivision = '1/1' | '1/2' | '1/3' | '1/4' | '1/6' | '1/8' | '1/16';
+export type SpeedSubdivision = '1/1' | '1/2' | '1/3' | '1/4' | '1/6' | '1/8' | '1/16' | '1/32';
 
 export const DRUM_SOUND_NAMES = ['kick', 'woodblock1', 'woodblock2', 'clap', 'snare', 'hihat', 'gong'] as const;
 export type DrumSoundName = typeof DRUM_SOUND_NAMES[number];

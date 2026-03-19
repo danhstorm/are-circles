@@ -35,6 +35,7 @@ function subdivisionToBeats(sub: SpeedSubdivision): number {
     case '1/6': return 2 / 3;
     case '1/8': return 0.5;
     case '1/16': return 0.25;
+    case '1/32': return 0.125;
   }
 }
 

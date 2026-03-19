@@ -12,6 +12,7 @@ function subdivisionToBeats(sub: SpeedSubdivision): number {
     case '1/6': return 2 / 3;
     case '1/8': return 0.5;
     case '1/16': return 0.25;
+    case '1/32': return 0.125;
   }
 }
 
@@ -78,6 +79,7 @@ export class DrumMachine {
     this.ctx = ctx;
     this.masterGain = masterGain;
     this.delayNode = delayNode;
+    if (this.enabled) this.ensureGraph();
   }
 
   private ensureGraph() {
@@ -186,6 +188,8 @@ export class DrumMachine {
       this._currentStep = -1;
       return;
     }
+
+    this.ensureGraph();
 
     const beatDur = 60 / tempo;
     const stepsPerBeat = 1 / subdivisionToBeats(this.config.speed);
