@@ -1,5 +1,5 @@
 {
-  "version": "1pvi4r",
+  "version": "id9ixg",
   "activePreset": 0,
   "scenes": [
     {
@@ -845,7 +845,7 @@
       "volumeMin": 0.1,
       "volumeMax": 0.3,
       "sound": "glass",
-      "speed": "1/16",
+      "speed": "1/32",
       "triggerProbability": 0.35,
       "rhythmRepeat": 0.4,
       "toneRepeat": 0.2,
@@ -876,7 +876,7 @@
       "rhythmRepeat": 0.45,
       "toneRepeat": 0.45,
       "octaveLow": 1,
-      "octaveHigh": 5,
+      "octaveHigh": 4,
       "filterCutoff": 2000,
       "decay": 2,
       "fmAmount": 0.8,
@@ -888,16 +888,16 @@
       "autoDecayMax": 0.7,
       "autoFmMin": 0.8,
       "autoFmMax": 2.5,
-      "autoTriggerMin": 0.2,
-      "autoTriggerMax": 0.6,
+      "autoTriggerMin": 0.7,
+      "autoTriggerMax": 0.95,
       "autoSpeed": 0.13,
       "detune": 0
     },
     "pad": {
-      "volume": 0.3,
-      "chordInterval": 3,
+      "volume": 0.25,
+      "chordInterval": 5,
       "reverb": 0.35,
-      "filterCutoff": 900,
+      "filterCutoff": 1050,
       "octaveLow": 2,
       "octaveHigh": 4,
       "detune": 0

@@ -369,6 +369,17 @@ export default function CirclesCanvas() {
       rendererRef.current?.media.setContrastMap(sContrast);
       rendererRef.current?.media.setInvertMap(sInvert);
       rendererRef.current?.media.setZoomToFitMap(sZoom);
+      // Sync music engine config so drum patterns and instrument settings stay current
+      const music = musicRef.current;
+      if (music) {
+        music.updateConfig(state.music);
+        const scene = state.scenes[state.activePreset];
+        music.setInstrumentEnabled('pling', scene.musicInstruments.pling);
+        music.setInstrumentEnabled('mid1', scene.musicInstruments.mid1);
+        music.setInstrumentEnabled('mid2', scene.musicInstruments.mid2);
+        music.setInstrumentEnabled('pad', scene.musicInstruments.pad);
+        music.setInstrumentEnabled('drums', scene.musicInstruments.drums);
+      }
     });
 
     const settings = buildRendererSettings(mergeTemplate(state), state);
