@@ -1,5 +1,5 @@
 {
-  "version": "id9ixg",
+  "version": "1bgjvg",
   "activePreset": 0,
   "scenes": [
     {
@@ -69,7 +69,7 @@
         "mid1": true,
         "mid2": true,
         "pad": true,
-        "drums": false
+        "drums": true
       },
       "presetTemplates": [
         1,
@@ -109,7 +109,7 @@
         "mid1": true,
         "mid2": true,
         "pad": true,
-        "drums": false
+        "drums": true
       },
       "presetTemplates": [
         8,
